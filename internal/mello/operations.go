@@ -82,6 +82,13 @@ func (c *Client) CreateComment(ticketID, body string) (*Comment, error) {
 	return out, c.do("POST", "/tickets/"+ticketID+"/comments", true, map[string]any{"body": body}, out)
 }
 
+// CreateTicket creates a ticket in a column. updates carries title (required)
+// plus optional description/position.
+func (c *Client) CreateTicket(columnID string, updates map[string]any) (*Ticket, error) {
+	out := &Ticket{}
+	return out, c.do("POST", "/columns/"+columnID+"/tickets", true, updates, out)
+}
+
 // MoveTicket moves a ticket to another column/position.
 func (c *Client) MoveTicket(ticketID, columnID string, position int) (*MoveTicketResult, error) {
 	out := &MoveTicketResult{}
