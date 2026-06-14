@@ -1,7 +1,7 @@
 # Mello CLI daemon and Mework server — build/test/release targets.
 
-BINARY         := mello
-CMD            := ./cmd/mello
+BINARY         := mework
+CMD            := ./cmd/mework
 SERVER_BINARY  := mework-server
 SERVER_CMD     := ./cmd/mework-server
 VERSION        ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)

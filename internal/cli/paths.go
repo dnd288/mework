@@ -5,26 +5,26 @@ import (
 	"path/filepath"
 )
 
-// MelloDir returns the root config directory (~/.mello), honoring MELLO_HOME override.
-func MelloDir() string {
-	if override := os.Getenv("MELLO_HOME"); override != "" {
+// MeworkDir returns the root config directory (~/.mework), honoring MEWORK_HOME override.
+func MeworkDir() string {
+	if override := os.Getenv("MEWORK_HOME"); override != "" {
 		return override
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		// Fall back to current dir if home is unavailable; better than panicking.
-		return ".mello"
+		return ".mework"
 	}
-	return filepath.Join(home, ".mello")
+	return filepath.Join(home, ".mework")
 }
 
 // ProfileDir returns the directory holding config/state for the given profile.
-// The empty profile maps to the root MelloDir so the default case stays flat.
+// The empty profile maps to the root MeworkDir so the default case stays flat.
 func ProfileDir(profile string) string {
 	if profile == "" {
-		return MelloDir()
+		return MeworkDir()
 	}
-	return filepath.Join(MelloDir(), "profiles", profile)
+	return filepath.Join(MeworkDir(), "profiles", profile)
 }
 
 // ConfigPath is the JSON config file path for a profile.

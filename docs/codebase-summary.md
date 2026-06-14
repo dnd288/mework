@@ -7,7 +7,7 @@ Mello's poll-only model.
 ## Layout
 
 ```
-cmd/mello/            Cobra commands (entry point + command groups)
+cmd/mework/            Cobra commands (entry point + command groups)
   main.go             root cmd, persistent flags, version, profile()
   help.go             command registration, config show/set
   client.go           REST client builder + workspace-id resolver
@@ -25,7 +25,7 @@ cmd/mework-server/    Mework central server entry point
 
 internal/cli/         config + path + flag-precedence layer
   config.go           Config struct, Load/Save (JSON, 0600)
-  paths.go            ~/.mello paths, profile isolation
+  paths.go            ~/.mework paths, profile isolation
   flags.go            FlagOrEnv, Resolve{BaseURL,WorkspaceID,Token}
 
 internal/server/      HTTP server, configuration, router, health handlers
@@ -66,7 +66,7 @@ internal/daemon/      poll loop + lifecycle
 
 Read/Write (CLI): CLI/daemon → `internal/mello` REST client → Mello API.
 Write-back (legacy daemon): daemon → `internal/mcp` → hosted Mello MCP.
-Trigger state (legacy daemon): `internal/daemon/state.go` → `~/.mello[/profiles/<p>]/state.json`.
+Trigger state (legacy daemon): `internal/daemon/state.go` → `~/.mework[/profiles/<p>]/state.json`.
 
 Central Server flow:
 1. Mello Comment Webhook → POST `/webhooks/mello` → server verifies signature → enqueues job (durable `jobs` table).

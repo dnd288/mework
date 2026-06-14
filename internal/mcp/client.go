@@ -15,7 +15,7 @@ import (
 )
 
 // ErrNoURL indicates the required mcp_url config value is unset.
-var ErrNoURL = errors.New("mcp url is required but not configured (set mcp_url via `mello config set mcp_url <endpoint>`)")
+var ErrNoURL = errors.New("mcp url is required but not configured (set mcp_url via `mework config set mcp_url <endpoint>`)")
 
 // Client wraps a streamable-HTTP MCP client bound to the hosted Mello MCP.
 type Client struct {
@@ -48,7 +48,7 @@ func New(ctx context.Context, url, token string, timeout time.Duration) (*Client
 
 	initReq := mcp.InitializeRequest{}
 	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initReq.Params.ClientInfo = mcp.Implementation{Name: "mello-cli", Version: "dev"}
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "mework-cli", Version: "dev"}
 	if _, err := cli.Initialize(ctx, initReq); err != nil {
 		_ = cli.Close()
 		return nil, fmt.Errorf("initialize mcp session: %w", err)

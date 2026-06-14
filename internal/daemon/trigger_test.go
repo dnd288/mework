@@ -48,7 +48,7 @@ func TestFindTriggersOrdersByCreatedAt(t *testing.T) {
 }
 
 func TestStateHandledIdempotency(t *testing.T) {
-	t.Setenv("MELLO_HOME", t.TempDir())
+	t.Setenv("MEWORK_HOME", t.TempDir())
 	s, err := LoadState("p")
 	if err != nil {
 		t.Fatal(err)

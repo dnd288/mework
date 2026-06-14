@@ -3,7 +3,7 @@ package cli
 import "testing"
 
 func TestConfigSaveLoadRoundTrip(t *testing.T) {
-	t.Setenv("MELLO_HOME", t.TempDir())
+	t.Setenv("MEWORK_HOME", t.TempDir())
 	const prof = "dev"
 
 	in := &Config{
@@ -31,7 +31,7 @@ func TestConfigSaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestLoadConfigMissingIsEmpty(t *testing.T) {
-	t.Setenv("MELLO_HOME", t.TempDir())
+	t.Setenv("MEWORK_HOME", t.TempDir())
 	cfg, err := LoadConfig("nonexistent")
 	if err != nil {
 		t.Fatalf("missing config should not error: %v", err)
@@ -42,7 +42,7 @@ func TestLoadConfigMissingIsEmpty(t *testing.T) {
 }
 
 func TestProfileIsolation(t *testing.T) {
-	t.Setenv("MELLO_HOME", t.TempDir())
+	t.Setenv("MEWORK_HOME", t.TempDir())
 	a := &Config{Token: "tok-a"}
 	b := &Config{Token: "tok-b"}
 	if err := a.Save("alpha"); err != nil {

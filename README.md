@@ -2,7 +2,7 @@
 
 A Go CLI and agent-runtime daemon for [Mello](https://mello.mezon.vn), the kanban tool.
 
-`mello` manages boards/tickets from the command line and runs a local **agent
+`mework` manages boards/tickets from the command line and runs a local **agent
 daemon** that watches your tickets for a trigger keyword (`/run`) in a comment,
 executes a local AI CLI (claude / codex / opencode) against the ticket, and
 writes the result back as a comment.
@@ -13,28 +13,28 @@ the Mello REST API directly; write-backs go through the hosted Mello MCP server.
 ## Install
 
 ```bash
-make build        # produces ./bin/mello
+make build        # produces ./bin/mework
 # or
-go install ./cmd/mello
+go install ./cmd/mework
 ```
 
 ## Quick start
 
 ```bash
 # 1. Authenticate with a Mello personal access token (validated against /me).
-mello login --token mello_pat_xxx
+mework login --token mello_pat_xxx
 # (omit the value to be prompted, keeping the token out of shell history)
 
 # 2. Point the daemon at the hosted Mello MCP endpoint (required for write-back).
-mello config set mcp_url https://<your-mello-mcp-endpoint>
+mework config set mcp_url https://<your-mello-mcp-endpoint>
 
 # 3. (optional) Set a default workspace for board/ticket/search commands.
-mello config set workspace_id <workspace-id>
+mework config set workspace_id <workspace-id>
 
 # 4. Start the agent daemon.
-mello daemon start          # background; --foreground to run in-process
-mello daemon status
-mello daemon logs -f
+mework daemon start          # background; --foreground to run in-process
+mework daemon status
+mework daemon logs -f
 
 # 5. Trigger an agent run: comment "/run <instructions>" on any ticket.
 #    The daemon posts a start comment, runs the AI CLI, and posts the result.
@@ -67,8 +67,8 @@ over **stdin** (never as a shell argument) to avoid command injection.
 
 ## Configuration
 
-Config lives at `~/.mello/config.json` (use `--profile <name>` to isolate
-config, daemon state, pid, and logs under `~/.mello/profiles/<name>/`).
+Config lives at `~/.mework/config.json` (use `--profile <name>` to isolate
+config, daemon state, pid, and logs under `~/.mework/profiles/<name>/`).
 Resolution precedence is **flag > environment > config file**.
 
 | Key / Env | Purpose |

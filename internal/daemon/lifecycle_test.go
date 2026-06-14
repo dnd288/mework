@@ -22,7 +22,7 @@ func TestHealthPortDeterministic(t *testing.T) {
 }
 
 func TestPIDLifecycle(t *testing.T) {
-	t.Setenv("MELLO_HOME", t.TempDir())
+	t.Setenv("MEWORK_HOME", t.TempDir())
 	const prof = "test"
 
 	if running, _ := IsRunning(prof); running {
@@ -45,7 +45,7 @@ func TestPIDLifecycle(t *testing.T) {
 }
 
 func TestIsRunningStalePID(t *testing.T) {
-	t.Setenv("MELLO_HOME", t.TempDir())
+	t.Setenv("MEWORK_HOME", t.TempDir())
 	const prof = "stale"
 	// Write a pid that is extremely unlikely to be a live process.
 	if err := WritePID(prof); err != nil {

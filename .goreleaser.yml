@@ -1,20 +1,20 @@
-# goreleaser config for the mello CLI.
+# goreleaser config for the mework CLI.
 # NOTE: the GitHub owner/repo and module path are not yet finalized (module is
 # currently the bare `mework`). Update `project_name`, the module path, and add
 # a `release:` block with the real GitHub repo before publishing. Until then,
 # `goreleaser build --snapshot --clean` cross-compiles locally without publish.
 version: 2
 
-project_name: mello
+project_name: mework
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: mello
-    main: ./cmd/mello
-    binary: mello
+  - id: mework
+    main: ./cmd/mework
+    binary: mework
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -32,7 +32,7 @@ builds:
 
 archives:
   - id: versioned
-    name_template: "mello-cli-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    name_template: "mework-cli-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     formats:
       - tar.gz
     format_overrides:

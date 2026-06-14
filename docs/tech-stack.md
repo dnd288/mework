@@ -1,4 +1,4 @@
-# Mello CLI Daemon — Tech Stack
+# Mework CLI Daemon — Tech Stack
 
 Status: approved-pending-plan
 Date: 2026-06-12
@@ -17,14 +17,14 @@ Go CLI + daemon mirroring Multica (`~/src/multica/server/cmd/multica`). Daemon =
 | Shell-word parsing | `github.com/mattn/go-shellwords` | Parse AI CLI invocation (as Multica) |
 | Daemonize (unix) | `syscall.SysProcAttr{Setsid:true}` | Detach from shell (as Multica) |
 | Daemonize (win) | `DETACHED_PROCESS` + `CREATE_BREAKAWAY_FROM_JOB` | Survive console close (as Multica) |
-| Config | JSON at `~/.mello/config.json` | Mirror `~/.multica/`; `--profile` isolation |
-| Release | goreleaser + Makefile | Versioned archives, self-update (`mello update`) |
+| Config | JSON at `~/.mework/config.json` | Mirror `~/.multica/`; `--profile` isolation |
+| Release | goreleaser + Makefile | Versioned archives, self-update (`mework update`) |
 | Tests | stdlib `testing` | Mirror Multica's `cmd_*_test.go` pattern |
 
 ## Layout (in /Users/mrdnd/src/mework)
 
 ```
-cmd/mello/            # main.go + cmd_*.go (Cobra commands)
+cmd/mework/            # main.go + cmd_*.go (Cobra commands)
 internal/cli/         # REST API client, errors, config read/write, self-update
 internal/mcp/         # mark3labs/mcp-go client wrapper (connect hosted Mello MCP over HTTP/SSE)
 internal/daemon/      # poll loop, runtime detection, task exec, write-back

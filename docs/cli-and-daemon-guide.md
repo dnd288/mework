@@ -1,11 +1,11 @@
 # CLI and Agent Daemon Guide
 
-Operational reference for the `mello` CLI and its agent-runtime daemon.
+Operational reference for the `mework` CLI and its agent-runtime daemon.
 
 ## Architecture
 
 ```
-mello CLI ──REST──▶ Mello API (read + CRUD)
+mework CLI ──REST──▶ Mello API (read + CRUD)
    │
    └─ daemon ──poll──▶ Mello REST (find /run comments)
                 ──run──▶ local AI CLI (claude/codex/opencode, prompt via stdin)
@@ -20,13 +20,13 @@ mello CLI ──REST──▶ Mello API (read + CRUD)
 
 | Command | Behavior |
 |---------|----------|
-| `mello daemon start` | Re-execs detached in the background (`--foreground` runs in-process). No-op if already running. |
-| `mello daemon stop` | Graceful shutdown via the local health port; falls back to SIGTERM. |
-| `mello daemon status` | Reports running/stopped, pid, and health port. |
-| `mello daemon restart` | Stops (if running) then starts. |
-| `mello daemon logs [-f]` | Prints (and optionally follows) the daemon log. |
+| `mework daemon start` | Re-execs detached in the background (`--foreground` runs in-process). No-op if already running. |
+| `mework daemon stop` | Graceful shutdown via the local health port; falls back to SIGTERM. |
+| `mework daemon status` | Reports running/stopped, pid, and health port. |
+| `mework daemon restart` | Stops (if running) then starts. |
+| `mework daemon logs [-f]` | Prints (and optionally follows) the daemon log. |
 
-State lives under the profile directory (default `~/.mello/`):
+State lives under the profile directory (default `~/.mework/`):
 
 - `daemon.pid` — running process id (liveness checked via signal 0, so a stale
   file after a crash is not mistaken for a live daemon).
@@ -72,12 +72,12 @@ rather than crashing.
 ## Profiles
 
 `--profile dev` isolates all of the above (config, pid, log, state, port, work
-dir) under `~/.mello/profiles/dev/`, letting you run multiple independent
+dir) under `~/.mework/profiles/dev/`, letting you run multiple independent
 daemons (e.g. against different Mello servers or workspaces).
 
 ## Not yet implemented
 
-- `mello update` self-update: deferred until the project has a published GitHub
+- `mework update` self-update: deferred until the project has a published GitHub
   release. The `.goreleaser.yml` + `Makefile` provide the build machinery; the
   update download/verify/swap flow needs the real release repo first.
 - Checklist write-back tick: the MCP client supports checklist tools, but the

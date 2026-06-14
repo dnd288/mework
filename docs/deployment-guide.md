@@ -49,7 +49,7 @@ CREATE DATABASE mework;
 Để biên dịch Mework Server sang mã máy:
 
 ```bash
-# Biên dịch cả CLI (mello) và Server (mework-server)
+# Biên dịch cả CLI (mework) và Server (mework-server)
 make build
 
 # Biên dịch riêng Mework Server
