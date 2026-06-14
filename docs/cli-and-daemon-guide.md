@@ -5,16 +5,30 @@ Operational reference for the `mework` CLI and its agent-runtime daemon.
 ## Architecture
 
 ```
-mework CLI ──REST──▶ Mello API (read + CRUD)
-   │
-   └─ daemon ──poll──▶ Mello REST (find /run comments)
-                ──run──▶ local AI CLI (claude/codex/opencode, prompt via stdin)
-                ──MCP──▶ hosted Mello MCP (write back start/done comments)
+External Task System (e.g. Mello)
+      │                               ▲
+      │ webhook                       │ write-back (MCP / API)
+      ▼                               │
+┌──────────────────────────────────────────────┐
+│                MeWork Server                 │
+│  - Inbound Adapter                           │
+│  - PostgreSQL Job Queue                      │
+│  - Outbound Adapter (Durable Outbox)         │
+└──────────────────────────────────────────────┘
+      ▲                               │
+      │ GET /v1/jobs/next             │ POST /v1/jobs/:id/ack
+      │ (long-poll, rt_token)         │ (status + results)
+      │                               ▼
+┌──────────────────────────────────────────────┐
+│                MeWork Daemon                 │
+│  - Local AI CLI (claude/codex/opencode)      │
+│  - Isolated workspace (~/.mework/work/)      │
+└──────────────────────────────────────────────┘
 ```
 
-- **Reads** (polling, board/ticket/comment fetch) use the REST API directly.
-- **Write-backs** (comments, checklist updates) go through the hosted Mello MCP
-  server over HTTP/SSE. `mcp_url` must be configured or the daemon will not start.
+- **Inbound triggers**: External task management systems (e.g., Mello) send webhooks to the MeWork Server. The server validates and parses the webhook payload to enqueue jobs into the PostgreSQL job queue.
+- **Daemon polling & execution**: The daemon long-polls the MeWork Server's `/v1/jobs/next` endpoint using its secure `rt_token` to claim pending jobs, executes them locally via the local AI engine, and returns the result using the acknowledgement (`ack`) endpoint.
+- **Server-side write-backs**: The MeWork Server manages posting comments or updating status back to the external task system via a durable outbox queue using its configured provider adapters, removing any provider-specific logic (and MCP configurations) from the local daemon.
 
 ## Daemon lifecycle
 
@@ -26,54 +40,42 @@ mework CLI ──REST──▶ Mello API (read + CRUD)
 | `mework daemon restart` | Stops (if running) then starts. |
 | `mework daemon logs [-f]` | Prints (and optionally follows) the daemon log. |
 
-State lives under the profile directory (default `~/.mework/`):
+State and operational files live under the profile directory (default `~/.mework/`):
 
 - `daemon.pid` — running process id (liveness checked via signal 0, so a stale
   file after a crash is not mistaken for a live daemon).
 - `daemon.log` — daemon output.
-- `state.json` — per-ticket handled comment-id sets (trigger idempotency).
-- `work/<ticket-id>/` — isolated working directory per agent run.
+- `work/<task-id>/` — isolated working directory per agent run.
+
+Note: Trigger idempotency is managed entirely server-side (using PostgreSQL unique constraints on `(provider_code, external_event_id)` and advisory locks for active job claims), meaning the daemon no longer requires a local `state.json` file.
 
 The health/shutdown port is derived deterministically from the profile name
 (base `19514` + hash), so each profile gets its own port without extra config.
 
 ## Trigger semantics
 
-The poll loop, each interval:
+The daemon long-polls the server for jobs, executing them sequentially:
 
-1. Resolves the watched boards (configured `watch_board_ids`, else every board
-   across accessible workspaces).
-2. Lists each board's tickets, then each ticket's comments.
-3. Selects comments that (a) contain the keyword, (b) are not authored by the
-   daemon's own user, and (c) are not already in the ticket's handled set —
-   ordered oldest-first by `created_at`.
-4. For each: marks `in_progress` (persisted first), posts a start comment, runs
-   the AI CLI with the ticket+comment as a stdin prompt, posts the result as a
-   comment, and records the final status (`done`/`failed`).
+1. **Job Claim**: The daemon issues a long-poll request (`GET /v1/jobs/next?wait=25s`) with its `rt_token`. When a job becomes available, the server locks and leases the job to the daemon.
+2. **State Acknowledgment**: Before starting, the daemon acknowledges the job is running (`POST /v1/jobs/:id/ack` with status `running`).
+3. **Heartbeat Loop**: While the job executes locally, the daemon runs a background ticker that heartbeats the server (`POST /v1/jobs/:id/heartbeat` every ~30 seconds) to extend the lease and prevent a timeout/lease lapse.
+4. **Execution**: The daemon builds the prompt from the canonical job payload (snapshot of title/description, instructions, profile prompt, and workflow config). It runs the AI CLI with the prompt supplied via stdin and captures the stdout/stderr and exit status inside an isolated workspace.
+5. **Terminal Acknowledgment**: The daemon sends the execution result back to the server (`POST /v1/jobs/:id/ack` with a terminal status `done` or `failed` along with the execution output/summary).
+6. **Server-Side Write-Back**: The server's Outbound Adapter picks up the finished job and enqueues it into a durable outbox queue. The server then writes the comments/status update back to the external task system (e.g., Mello) via the provider's MCP/REST APIs.
 
-**Why self-authored comments are skipped:** the daemon writes start/done
-comments back to the same ticket. Without the author filter, those comments
-(which may echo the keyword) would re-trigger the daemon endlessly.
+**Trigger Idempotency and Loop Prevention:**
+Trigger idempotency is handled entirely on the server side using unique constraints on `(provider_code, external_event_id)` to ensure each webhook event triggers exactly one job. Furthermore, the server filters out events/comments authored by the agent itself to prevent infinite feedback loops.
 
 ## AI backends
 
-Detected from `PATH` in preference order: `claude`, `codex`, `opencode`
-(override with `daemon.backends`). If none are installed the daemon logs a
-warning and skips triggers rather than failing. The prompt is delivered on
-stdin, never via argv/shell, so attacker-controllable ticket text cannot inject
-commands.
-
-## Rate limiting
-
-REST `429` / `rate_limited` responses are detected and logged with a hint to
-lengthen the poll interval (`daemon.poll_interval_seconds`). The loop continues
-rather than crashing.
+The daemon executes the local AI CLI based on the target `harness` specified in the job payload (e.g., `claude-code`). Local AI CLI executables (like `claude`, `codex`, or `opencode`) are resolved from the local `PATH` or overridden via `daemon.backends` settings. The instructions profile, workflow config, and task snapshots are delivered directly within the job payload and fed strictly via stdin to ensure injection safety.
 
 ## Profiles
 
-`--profile dev` isolates all of the above (config, pid, log, state, port, work
-dir) under `~/.mework/profiles/dev/`, letting you run multiple independent
-daemons (e.g. against different Mello servers or workspaces).
+Profiles exist in two dimensions:
+
+- **Local Daemon Profiles**: Specifying `--profile dev` on CLI commands isolates local daemon configuration, pid, logs, and workspace folders under `~/.mework/profiles/dev/`.
+- **Server-Side Profiles**: Created and updated via the CLI (`mework profile add`) and stored on the central server. These store markdown instructions, backend hints, target harnesses, and workflow configuration JSON (e.g., allowed tools, prompt templates, or environment options). When a job is enqueued, the server-side profile configuration is resolved, snapshotted, and delivered directly within the job payload to the daemon.
 
 ## Not yet implemented
 
