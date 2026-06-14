@@ -1,6 +1,6 @@
 # Codebase Summary
 
-Go CLI + agent-runtime daemon for Mello (kanban). Module path `mework`.
+Go CLI + agent-runtime daemon for Mello (kanban) and central Mework server. Module path `mework`.
 Mirrors the Multica daemon's structure; adapts its push-based runtime to
 Mello's poll-only model.
 
@@ -20,10 +20,23 @@ cmd/mello/            Cobra commands (entry point + command groups)
   cmd_daemon_windows.go  DETACHED_PROCESS detach (build tag windows)
   cmd_version.go      version command
 
+cmd/mework-server/    Mework central server entry point
+  main.go             config load, migrations run, HTTP listen, graceful shutdown
+
 internal/cli/         config + path + flag-precedence layer
   config.go           Config struct, Load/Save (JSON, 0600)
   paths.go            ~/.mello paths, profile isolation
   flags.go            FlagOrEnv, Resolve{BaseURL,WorkspaceID,Token}
+
+internal/server/      HTTP server, configuration, router, health handlers
+  config.go           env config (DATABASE_URL, LISTEN_ADDR, SERVER_KEY)
+  router.go           chi router setup with middlewares (request id, logger, recover)
+  health.go           GET /healthz database ping check
+
+internal/store/       database connection pool and goose migrations
+  db.go               pgxpool wrapper + stdlib sql database connector
+  migrate.go          embedded goose migrations up/down runner
+  migrations/         SQL migrations (accounts, account_boards, runtimes, profiles, jobs)
 
 internal/mello/       REST client + entity models
   models.go           User, Workspace, Board, Column, …
@@ -51,9 +64,14 @@ internal/daemon/      poll loop + lifecycle
 
 ## Data flow
 
-Read path: CLI/daemon → `internal/mello` REST client → Mello API.
-Write-back path: daemon → `internal/mcp` → hosted Mello MCP.
-Trigger state: `internal/daemon/state.go` → `~/.mello[/profiles/<p>]/state.json`.
+Read/Write (CLI): CLI/daemon → `internal/mello` REST client → Mello API.
+Write-back (legacy daemon): daemon → `internal/mcp` → hosted Mello MCP.
+Trigger state (legacy daemon): `internal/daemon/state.go` → `~/.mello[/profiles/<p>]/state.json`.
+
+Central Server flow:
+1. Mello Comment Webhook → POST `/webhooks/mello` → server verifies signature → enqueues job (durable `jobs` table).
+2. Daemon long-poll → GET `/v1/jobs/next` → server claims job with advisory lock + lease.
+3. Daemon runs agent (stdin prompt) → posts updates directly to Mezon → ACK/report status.
 
 ## Key invariants
 
@@ -69,5 +87,9 @@ Trigger state: `internal/daemon/state.go` → `~/.mello[/profiles/<p>]/state.jso
 Unit tests cover: flag precedence, config round-trip + profile isolation, REST
 error→exit-code mapping + decode, MCP url-required gate, trigger keyword match +
 self-skip + ordering, state idempotency + persistence, runtime detection, runner
-stdin/exit handling, pid lifecycle + health-port determinism. Live integration
-(REST + MCP) is left to manual/CI runs with real credentials.
+stdin/exit handling, pid lifecycle + health-port determinism.
+
+Integration tests cover:
+- Server: Config env loader validation, `/healthz` DB ping status codes.
+- Store: Embedded SQL migration run (up/down rollback) verifying core tables (accounts, account_boards, runtimes, profiles, jobs) and their respective unique/composite/partial indexes against a real Postgres container database.
+

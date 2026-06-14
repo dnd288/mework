@@ -14,8 +14,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// ErrNoURL indicates the required mcp.url config value is unset.
-var ErrNoURL = errors.New("mcp url is required but not configured (set mcp.url via `mello config set mcp.url <endpoint>`)")
+// ErrNoURL indicates the required mcp_url config value is unset.
+var ErrNoURL = errors.New("mcp url is required but not configured (set mcp_url via `mello config set mcp_url <endpoint>`)")
 
 // Client wraps a streamable-HTTP MCP client bound to the hosted Mello MCP.
 type Client struct {
