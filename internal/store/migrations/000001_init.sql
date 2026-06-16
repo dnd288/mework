@@ -74,6 +74,7 @@ CREATE TABLE jobs (
     task_title VARCHAR(255) NOT NULL,
     task_description TEXT NOT NULL,
     profile_body_snapshot TEXT,
+    workflow VARCHAR(255),
     instructions TEXT NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'queued',
     claim_lease_until TIMESTAMPTZ,

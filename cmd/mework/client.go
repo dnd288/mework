@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"mework/internal/cli"
 	"mework/internal/mello"
+	"mework/internal/meworkclient"
 )
 
 // newRESTClient builds a Mello REST client from resolved config + flags/env.
@@ -23,6 +25,22 @@ func newRESTClient(cmd *cobra.Command) (*mello.Client, *cli.Config, error) {
 	}
 	baseURL := cli.ResolveBaseURL(cmd, cfg)
 	return mello.NewClient(baseURL, token, 30*time.Second, version), cfg, nil
+}
+
+// newMeworkClient builds a client for the mework-server.
+func newMeworkClient() (*meworkclient.Client, *cli.Config, error) {
+	cfg, err := cli.LoadConfig(profile())
+	if err != nil {
+		return nil, nil, err
+	}
+	serverURL := cfg.ServerURL
+	if serverURL == "" {
+		serverURL = os.Getenv("MEWORK_SERVER_URL")
+	}
+	if serverURL == "" {
+		serverURL = "http://localhost:8080" // Default fallback
+	}
+	return meworkclient.NewClient(serverURL, 10*time.Second), cfg, nil
 }
 
 // requireWorkspaceID resolves the workspace id or errors if unset.

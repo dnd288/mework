@@ -7,10 +7,11 @@ func TestConfigSaveLoadRoundTrip(t *testing.T) {
 	const prof = "dev"
 
 	in := &Config{
-		BaseURL:     "https://mello.example/api/v1",
-		WorkspaceID: "ws1",
-		Token:       "mello_pat_x",
-		MCPURL:      "https://mcp.example",
+		BaseURL:      "https://mello.example/api/v1",
+		WorkspaceID:  "ws1",
+		Token:        "mello_pat_x",
+		ServerURL:    "http://localhost:8080",
+		RuntimeToken: "rt_token_xyz",
 	}
 	in.Daemon.TriggerKeyword = "/go"
 	in.Daemon.PollIntervalSeconds = 10
@@ -22,7 +23,7 @@ func TestConfigSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.BaseURL != in.BaseURL || out.Token != in.Token || out.MCPURL != in.MCPURL {
+	if out.BaseURL != in.BaseURL || out.Token != in.Token || out.ServerURL != in.ServerURL || out.RuntimeToken != in.RuntimeToken {
 		t.Errorf("round-trip mismatch: %+v", out)
 	}
 	if out.Daemon.TriggerKeyword != "/go" || out.Daemon.PollIntervalSeconds != 10 {

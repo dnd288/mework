@@ -7,10 +7,12 @@ import (
 
 // Config holds the environment configuration for the mework server.
 type Config struct {
-	DatabaseURL   string
-	ListenAddr    string
-	WebhookSecret string
-	ServerKey     string
+	DatabaseURL     string
+	ListenAddr      string
+	WebhookSecret   string
+	ServerKey       string
+	MeworkSecretKey string
+	MelloBaseURL    string
 }
 
 // LoadConfig loads the configuration from environment variables.
@@ -34,10 +36,22 @@ func LoadConfig() (*Config, error) {
 		return nil, errors.New("SERVER_KEY is required but not set")
 	}
 
+	meworkSecretKey := os.Getenv("MEWORK_SECRET_KEY")
+	if meworkSecretKey == "" {
+		return nil, errors.New("MEWORK_SECRET_KEY is required but not set")
+	}
+
+	melloBaseURL := os.Getenv("MELLO_BASE_URL")
+	if melloBaseURL == "" {
+		melloBaseURL = "https://mello.mezon.vn/api/v1"
+	}
+
 	return &Config{
-		DatabaseURL:   dbURL,
-		ListenAddr:    listenAddr,
-		WebhookSecret: webhookSecret,
-		ServerKey:     serverKey,
+		DatabaseURL:     dbURL,
+		ListenAddr:      listenAddr,
+		WebhookSecret:   webhookSecret,
+		ServerKey:       serverKey,
+		MeworkSecretKey: meworkSecretKey,
+		MelloBaseURL:    melloBaseURL,
 	}, nil
 }
