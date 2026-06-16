@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeWork - Product Requirements Document & Architecture Specification</title>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #0f172a;
+            --slate-800: #1e293b;
+            --slate-700: #334155;
+            --slate-600: #475569;
+            --slate-100: #f1f5f9;
+            --slate-50: #f8fafc;
+            --border: #e2e8f0;
+            --sidebar-width: 280px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--slate-800);
+            background-color: var(--slate-50);
+            line-height: 1.6;
+        }
+
+        /* Layout Structure */
+        .wrapper {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar navigation */
+        aside {
+            width: var(--sidebar-width);
+            background-color: var(--dark);
+            color: #fff;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            overflow-y: auto;
+            padding: 2rem 1.5rem;
+            z-index: 100;
+        }
+
+        aside h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        aside h2 span {
+            background-color: var(--primary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        aside nav ul {
+            list-style: none;
+        }
+
+        aside nav ul li {
+            margin-bottom: 0.5rem;
+        }
+
+        aside nav ul li.group-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--slate-600);
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        aside nav ul li a {
+            color: #cbd5e1;
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: block;
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        aside nav ul li a:hover {
+            color: #fff;
+            background-color: var(--slate-800);
+        }
+
+        aside nav ul li a.active {
+            color: #fff;
+            background-color: var(--primary);
+            font-weight: 600;
+        }
+
+        /* Main Content Container */
+        main {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: 3rem 4rem;
+            max-width: 1200px;
+        }
+
+        /* Typography & Components */
+        header {
+            margin-bottom: 3rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1.5rem;
+        }
+
+        .meta {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--slate-600);
+        }
+
+        .meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .badge {
+            background-color: #dbeafe;
+            color: #1e40af;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge.success {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        /* Status pills for implementation tracking */
+        .status {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .status-done {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-pending {
+            background-color: #f1f5f9;
+            color: #475569;
+        }
+
+        .status-blocked {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--dark);
+            letter-spacing: -0.025em;
+        }
+
+        h2 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+            scroll-margin-top: 2rem;
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--slate-800);
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        p {
+            margin-bottom: 1.25rem;
+            color: var(--slate-700);
+        }
+
+        ul, ol {
+            margin-bottom: 1.25rem;
+            padding-left: 1.5rem;
+            color: var(--slate-700);
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Architecture Section & SVG */
+        .diagram-container {
+            background-color: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 2rem 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+        }
+
+        .diagram-container svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Database & Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background-color: var(--slate-100);
+            font-weight: 600;
+            color: var(--slate-800);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: var(--slate-50);
+        }
+
+        /* Code & Pre */
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background-color: var(--slate-100);
+            color: #0f172a;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        pre {
+            background-color: var(--dark);
+            color: #f8fafc;
+            padding: 1.5rem;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+            font-size: 0.85rem;
+        }
+
+        /* Info boxes */
+        .callout {
+            border-left: 4px solid var(--primary);
+            background-color: #eff6ff;
+            padding: 1.25rem;
+            border-radius: 0 8px 8px 0;
+            margin: 1.5rem 0;
+        }
+
+        .callout.success {
+            border-left-color: var(--success);
+            background-color: #ecfdf5;
+        }
+
+        .callout.warning {
+            border-left-color: var(--warning);
+            background-color: #fffbeb;
+        }
+
+        .callout h4 {
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+
+        .callout p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Steps */
+        .step-list {
+            list-style: none;
+            position: relative;
+            padding-left: 2rem;
+            margin: 2rem 0;
+        }
+
+        .step-list::before {
+            content: '';
+            position: absolute;
+            left: 9px;
+            top: 5px;
+            bottom: 5px;
+            width: 2px;
+            background-color: var(--border);
+        }
+
+        .step-item {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        .step-badge {
+            position: absolute;
+            left: -2rem;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: var(--primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+            border: 3px solid var(--slate-50);
+            box-shadow: 0 0 0 2px var(--primary);
+        }
+
+        .step-title {
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 0.25rem;
+        }
+
+        /* Responsive Layout */
+        @media (max-width: 1024px) {
+            aside {
+                display: none;
+            }
+            main {
+                margin-left: 0;
+                padding: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <aside>
+            <h2>MeWork <span>Docs</span></h2>
+            <nav>
+                <ul>
+                    <li class="group-title">Tổng quan</li>
+                    <li><a href="#overview" class="active">Giới thiệu dự án</a></li>
+                    <li><a href="#prd-value">Giá trị cốt lõi</a></li>
+
+                    <li class="group-title">Yêu cầu sản phẩm (PRD)</li>
+                    <li><a href="#prd-usecases">Use Cases cốt lõi</a></li>
+                    <li><a href="#prd-functional">Yêu cầu Chức năng</a></li>
+                    <li><a href="#prd-nonfunctional">Yêu cầu Phi chức năng</a></li>
+                    <li><a href="#prd-future">Kế hoạch Mở rộng</a></li>
+
+                    <li class="group-title">Thiết kế Kiến trúc</li>
+                    <li><a href="#arch-overview">Mô hình Hệ thống</a></li>
+                    <li><a href="#arch-status">Trạng thái Triển khai</a></li>
+                    <li><a href="#arch-diagram">Sơ đồ Kiến trúc (SVG)</a></li>
+                    <li><a href="#arch-sequence">Luồng xử lý (Sequence)</a></li>
+                    <li><a href="#arch-db">Thiết kế Cơ sở dữ liệu</a></li>
+                    <li><a href="#arch-security">Cơ chế Bảo mật</a></li>
+
+                    <li class="group-title">Hướng dẫn & Vận hành</li>
+                    <li><a href="#ops-cli">CLI Command Reference</a></li>
+                    <li><a href="#ops-env">Cấu hình Môi trường</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main>
+            <header>
+                <span class="badge">Pre-Release</span>
+                <h1>MeWork: PRD & Specification tài liệu kiến trúc</h1>
+                <div class="meta">
+                    <span><strong>Phiên bản:</strong> v1.0.0</span>
+                    <span><strong>Ngày cập nhật:</strong> 15/06/2026</span>
+                    <span><strong>Tác giả:</strong> Duong Nguyen Dai</span>
+                </div>
+            </header>
+
+            <!-- SECTION: Overview -->
+            <section id="overview">
+                <h2>1. Giới thiệu dự án</h2>
+                <p>
+                    <strong>MeWork</strong> là một hệ thống runtime daemon và provider gateway tích hợp trí tuệ nhân tạo (AI-agent runtime). Hệ thống cho phép tự động hóa quy trình phát triển phần mềm bằng cách kết nối các nền tảng quản lý công việc (như bảng Kanban Mello, Jira, Linear, GitHub Issues) trực tiếp tới các bộ công cụ AI agent chạy cục bộ tại máy trạm của lập trình viên (như Claude Code CLI, Codex, OpenCode).
+                </p>
+                <p>
+                    Thay vì sử dụng các dịch vụ AI tập trung trên đám mây gây rủi ro lộ mã nguồn và khóa API bí mật, MeWork sử dụng mô hình <strong>lai (hybrid)</strong>: Máy chủ trung tâm đóng vai trò định tuyến và quản lý hàng đợi tác vụ một cách độc lập với nền tảng quản lý công việc (provider-agnostic), còn các tác vụ AI thực tế được kéo về chạy trực tiếp trên máy trạm cá nhân thông qua Daemon cục bộ, sử dụng quyền truy cập mã nguồn cục bộ an toàn.
+                </p>
+            </section>
+
+            <!-- SECTION: Core Values -->
+            <section id="prd-value">
+                <h3>Giá trị cốt lõi & Nguyên lý Thiết kế</h3>
+                <div class="callout success">
+                    <h4>Các nguyên tắc thiết kế tối thượng</h4>
+                    <p>Kiến trúc hệ thống được tuân thủ nghiêm ngặt theo 3 nguyên lý cốt lõi của kỹ nghệ phần mềm:</p>
+                    <ul>
+                        <li><strong>KISS (Keep It Simple, Stupid):</strong> Đơn giản hóa luồng giao tiếp. Máy trạm không cần cài đặt các cấu hình kết nối MCP phức tạp hay cấu hình webhook trực tiếp; máy chủ gánh vác toàn bộ trách nhiệm điều hợp.</li>
+                        <li><strong>YAGNI (You Aren't Gonna Need It):</strong> Không phát triển quá mức các tính năng phức tạp như hệ thống quản lý kéo thả (workflow engine DSL) hay bảng điều khiển UI phức tạp khi chưa cần thiết. Tập trung hoàn thành cơ chế xếp hàng tác vụ (queue) và bảo mật trước.</li>
+                        <li><strong>DRY (Don't Repeat Yourself):</strong> Gom toàn bộ logic liên lạc với các hệ thống đích (WriteBack) vào máy chủ trung tâm. Daemon máy trạm hoàn toàn không chứa bất kỳ mã nguồn chuyên biệt nào dành riêng cho Mello hay GitHub, chỉ tương tác thông qua giao thức Job chuẩn hóa.</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- SECTION: Use Cases -->
+            <section id="prd-usecases">
+                <h2>2. Tài liệu yêu cầu sản phẩm (PRD)</h2>
+                <h3>Các Use Cases & Tác vụ Người dùng chính</h3>
+
+                <h4>Tác vụ 1: Kích hoạt Agent từ Kanban Board</h4>
+                <p>Lập trình viên muốn gọi AI hỗ trợ sửa lỗi hoặc triển khai tính năng mới trên một ticket chỉ bằng cách viết bình luận.</p>
+                <ul>
+                    <li>Người dùng vào Mello, mở ticket cụ thể và để lại bình luận: <code>/run macbook-pro sửa lỗi tràn bộ nhớ trong hàm router.go</code>.</li>
+                    <li>MeWork Server nhận webhook, chuyển đổi payload thành canonical job và lưu vào hàng đợi.</li>
+                    <li>Daemon chạy trên máy <code>macbook-pro</code> kéo job về, gọi <code>claude</code> CLI sửa mã nguồn cục bộ, chạy test xác thực.</li>
+                    <li>Daemon gửi trả kết quả (Thành công/Thất bại kèm theo logs) lên Server.</li>
+                    <li>Server tự động ghi ngược phản hồi lên ticket Mello để người dùng theo dõi.</li>
+                </ul>
+
+                <h4>Tác vụ 2: Đăng ký Agent Runtime độc lập</h4>
+                <p>Người dùng muốn liên kết nhiều thiết bị (PC công ty, Laptop cá nhân, VPS kiểm thử) vào tài khoản để nhận các tác vụ phù hợp.</p>
+                <ul>
+                    <li>Người dùng dùng CLI gõ lệnh <code>mework runtime add --code [id] --label [name]</code>.</li>
+                    <li>Hệ thống tạo và trả về khóa xác thực duy nhất <code>rt_token</code>.</li>
+                    <li>Người dùng dùng token này khởi động daemon cục bộ mà không cần để lộ tài khoản hay mã cá nhân (PAT) trên thiết bị đó.</li>
+                </ul>
+            </section>
+
+            <!-- SECTION: Functional Requirements -->
+            <section id="prd-functional">
+                <h3>Yêu cầu Chức năng (Functional Requirements)</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Mã yêu cầu</th>
+                            <th>Thành phần</th>
+                            <th>Mô tả chi tiết tính năng</th>
+                            <th>Mức độ ưu tiên</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>REQ-F01</strong></td>
+                            <td>Central Server</td>
+                            <td><strong>Bộ định tuyến Webhook đa nền tảng (Inbound Adapter):</strong> Tiếp nhận webhook từ Mello/GitHub, xác thực chữ ký số (HMAC) và trích xuất thông tin thành <code>CanonicalEvent</code> chuẩn hóa.</td>
+                            <td>Cao (P1)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>REQ-F02</strong></td>
+                            <td>Central Server</td>
+                            <td><strong>Hàng đợi Tác vụ Bền vững (Job Queue):</strong> Quản lý trạng thái Job (queued, claimed, running, done, failed). Hỗ trợ cơ chế khóa (advisory lock) giúp loại bỏ xung đột tranh chấp job giữa các luồng daemon.</td>
+                            <td>Cao (P1)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>REQ-F03</strong></td>
+                            <td>Central Server</td>
+                            <td><strong>Bộ điều phối Ghi ngược (Outbound Adapter - WriteBack):</strong> Sử dụng cơ chế hộp thư gửi đi bền vững (Durable Outbox) để thực hiện kết nối ngược lại các nền tảng đích thông qua giao thức MCP (Model Context Protocol). Tự động thử lại với lũy thừa thời gian nếu lỗi kết nối.</td>
+                            <td>Cao (P1)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>REQ-F04</strong></td>
+                            <td>Local Daemon</td>
+                            <td><strong>Trình tiêu thụ hàng đợi (Long-Polling Client):</strong> Thực hiện kết nối long-polling <code>wait=25s</code> lên server bằng <code>rt_token</code> để nhận việc ngay lập tức mà không tiêu tốn tài nguyên tải lặp.</td>
+                            <td>Cao (P1)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>REQ-F05</strong></td>
+                            <td>Local Daemon</td>
+                            <td><strong>Bộ thực thi AI cục bộ (Agent Process Runner):</strong> Phát hiện môi trường (<code>claude</code>, <code>codex</code>, <code>opencode</code>) trong hệ thống. Khởi chạy AI bằng đường ống <code>stdin</code> biệt lập, tránh lỗi command injection, kiểm soát thời gian chạy (timeout).</td>
+                            <td>Cao (P1)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>REQ-F06</strong></td>
+                            <td>Local Daemon</td>
+                            <td><strong>Giữ nhịp kết nối (Heartbeat):</strong> Chạy một tiến trình ngầm gửi heartbeat định kỳ 30 giây lên server trong khi AI đang chạy cục bộ để gia hạn thời gian chiếm giữ Job (lease), ngăn ngừa việc Job bị thu hồi do chạy quá lâu.</td>
+                            <td>Cao (P1)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>REQ-F07</strong></td>
+                            <td>CLI Command</td>
+                            <td><strong>Quản lý tiến trình Daemon cục bộ:</strong> Các lệnh kiểm soát daemon bao gồm: <code>start</code> (tách tiến trình nền), <code>stop</code> (dừng an toàn bằng tín hiệu), <code>status</code>, <code>restart</code>, <code>logs</code>.</td>
+                            <td>Trung bình (P2)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- SECTION: Non-Functional Requirements -->
+            <section id="prd-nonfunctional">
+                <h3>Yêu cầu Phi chức năng (Non-Functional Requirements)</h3>
+
+                <h4>1. An toàn và Bảo mật (Security)</h4>
+                <ul>
+                    <li><strong>Bảo mật thông tin đăng nhập:</strong> Daemon máy trạm không lưu trữ Mello Personal Access Token (PAT). Thay vào đó, máy trạm chỉ sử dụng <code>rt_token</code> (sinh ra từ cơ chế băm HMAC một chiều) có quyền hạn bị giới hạn chỉ để nhận và báo cáo các Job thuộc về runtime đó.</li>
+                    <li><strong>Mã hóa dữ liệu nhạy cảm:</strong> Mọi token dịch vụ liên kết (ví dụ: thông tin kết nối MCP) lưu trên máy chủ trung tâm phải được mã hóa đối xứng AES-256-GCM ở tầng cơ sở dữ liệu (sử dụng khóa bí mật <code>MEWORK_SECRET_KEY</code> nạp từ biến môi trường).</li>
+                    <li><strong>Bảo vệ thực thi mã nguồn:</strong> Đầu vào của AI Agent được đẩy hoàn toàn thông qua đường ống luồng dữ liệu chuẩn (Standard Input - <code>stdin</code>), ngăn chặn tuyệt đối các cuộc tấn công chèn lệnh hệ thống thông qua tham số dòng lệnh (Command Injection).</li>
+                </ul>
+
+                <h4>2. Tính tin cậy và Khả năng chịu lỗi (Reliability)</h4>
+                <ul>
+                    <li><strong>Chống trùng lặp tác vụ (Idempotency):</strong> Tận dụng ràng buộc duy nhất composite index của PostgreSQL trên cột <code>(provider_code, external_event_id)</code> để đảm bảo mỗi hành động kích hoạt trên bảng Kanban chỉ tạo ra duy nhất một Job trong hàng đợi, ngay cả khi webhook bị gửi lặp lại nhiều lần.</li>
+                    <li><strong>Thu hồi Job chết:</strong> Khi một máy trạm bị mất điện hoặc mất mạng đột ngột lúc đang chạy AI, cơ chế hết hạn thời gian thuê (claim lease expire) trên server sẽ tự động phát hiện và giải phóng Job trở lại hàng đợi sau khi hết chu kỳ heartbeat, đảm bảo hệ thống không bị treo.</li>
+                </ul>
+
+                <h4>3. Hiệu năng (Performance)</h4>
+                <ul>
+                    <li><strong>Độ trễ phản hồi thấp:</strong> Sử dụng phương thức HTTP Long-Polling giúp daemon nhận việc ngay lập tức trong vòng dưới 100ms kể từ khi Job được đẩy vào hàng đợi, thay vì phải chạy vòng lặp truy vấn liên tục gây quá tải cơ sở dữ liệu.</li>
+                    <li><strong>Truy vấn tối ưu:</strong> Tận dụng chỉ mục hỗn hợp (Partial Index) trên cơ sở dữ liệu cho các tác vụ lấy Job <code>idx_jobs_claim ON jobs (runtime_id, status, created_at)</code> và xử lý outbox <code>idx_jobs_writeback ON jobs (writeback_status) WHERE writeback_status = 'pending'</code>.</li>
+                </ul>
+            </section>
+
+            <!-- SECTION: Future Plan -->
+            <section id="prd-future">
+                <h3>Kế hoạch Mở rộng trong tương lai</h3>
+                <ul>
+                    <li>Tích hợp các Provider phổ biến khác như: GitHub Issues, Linear, Jira Cloud bằng cách bổ sung thêm cấu trúc adapter kế thừa interface <code>Provider</code> có sẵn trên server mà không cần sửa đổi mã nguồn của Daemon.</li>
+                    <li>Cơ chế gom luồng thực thi song song trên máy trạm để xử lý nhiều yêu cầu đồng thời từ bảng Kanban (Multi-job concurrency).</li>
+                    <li>Xây dựng cơ chế cập nhật tự động an toàn cho daemon CLI thông qua lệnh <code>mework update</code> khi hệ thống phát hành phiên bản mới trên GitHub.</li>
+                </ul>
+            </section>
+
+            <!-- SECTION: Architecture Overview -->
+            <section id="arch-overview">
+                <h2>3. Thiết kế Kiến trúc & Mã nguồn</h2>
+                <h3>Mô hình Hệ thống & Ranh giới trách nhiệm</h3>
+                <p>
+                    Hệ thống được thiết kế theo kiến trúc hướng cổng và bộ điều hợp (Hexagonal / Ports-and-Adapters). Toàn bộ kiến trúc được phân tách thành 3 vùng ranh giới rõ rệt:
+                </p>
+                <ol>
+                    <li><strong>Không gian Máy trạm (Workspace Client):</strong> Nơi chứa mã nguồn của dự án cần phát triển, daemon cục bộ thực thi tác vụ AI thông qua môi trường cách ly (Sandbox directory).</li>
+                    <li><strong>Máy chủ Trung tâm (MeWork Server):</strong> Nhận và phân tích webhook, quản lý hàng đợi và trạng thái Job, mã hóa thông tin bảo mật, xử lý outbox ghi ngược kết quả thông qua MCP Client.</li>
+                    <li><strong>Nền tảng Quản lý công việc ngoại vi (Task System Platform):</strong> Nơi sinh ra sự kiện kích hoạt tác vụ (Kanban Board) và tiếp nhận bình luận báo cáo kết quả của AI.</li>
+                </ol>
+
+                <div class="callout warning">
+                    <h4>Lưu ý về trạng thái triển khai (Implementation Status)</h4>
+                    <p>
+                        Đây là thiết kế kiến trúc <strong>mục tiêu (target)</strong> của hệ thống. Tại thời điểm hiện tại, dự án đang trong giai đoạn <strong>Pre-Release</strong>: phần lớn các thành phần đang ở trạng thái thiết kế hoặc đang phát triển. Chỉ tầng schema cơ sở dữ liệu (Phase 01) đã hoàn thành. Bảng dưới đây phản ánh đúng trạng thái mã nguồn hiện tại để tránh hiểu nhầm.
+                    </p>
+                </div>
+
+                <h3 id="arch-status" style="scroll-margin-top: 2rem;">Trạng thái triển khai từng thành phần (Current Code Status)</h3>
+                <p>
+                    Theo lộ trình triển khai (plan <code>260614-1356-mework-provider-gateway</code>), trạng thái thực tế của mã nguồn như sau:
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Thành phần / Phase</th>
+                            <th>Mô tả</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Phase 01</strong> — Generic Provider Schema</td>
+                            <td>Schema PostgreSQL generic (7 bảng), migration <code>000001_init.sql</code></td>
+                            <td><span class="status status-done">Hoàn thành</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Server Scaffold</strong></td>
+                            <td>HTTP server (chi router) hiện chỉ mount <code>/healthz</code> + kết nối DB pool</td>
+                            <td><span class="status status-done">Hoàn thành</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 02</strong> — Account &amp; Runtime Registry</td>
+                            <td>Đăng ký runtime, <code>rt_token</code> (indexed HMAC), CRUD connection + secret seal/open</td>
+                            <td><span class="status status-pending">Chưa làm</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 03</strong> — Inbound Adapter</td>
+                            <td>Interface <code>Provider</code> + registry + <code>MelloAdapter</code> + webhook dispatch</td>
+                            <td><span class="status status-blocked">Blocked (chờ payload mẫu Mello)</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 04</strong> — Profile / Workflow Store</td>
+                            <td>Cột <code>harness</code> + <code>workflow_config JSONB</code> (cột DB đã tạo; logic chưa)</td>
+                            <td><span class="status status-pending">Chưa làm</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 05</strong> — Canonical Job Queue</td>
+                            <td>State machine enqueue, TTL, lease, attempts</td>
+                            <td><span class="status status-pending">Chưa làm</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 06</strong> — Job Claim/Ack/Heartbeat + WriteBack</td>
+                            <td>API <code>/v1/jobs/next</code>, <code>/v1/jobs/:id/ack</code>, heartbeat, outbound MCP write-back</td>
+                            <td><span class="status status-pending">Chưa làm</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 07</strong> — Daemon Reshape</td>
+                            <td>Daemon canonical consumer (provider-free); hiện code daemon vẫn là bản poll Mello cũ</td>
+                            <td><span class="status status-pending">Chưa làm</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 08</strong> — CLI provider/runtime/profile</td>
+                            <td>Lệnh <code>provider connect</code>, <code>runtime add</code>, <code>profile add</code></td>
+                            <td><span class="status status-pending">Chưa làm</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 09</strong> — Integration Tests + Docs</td>
+                            <td>Test tích hợp end-to-end, conformance test cho Provider interface</td>
+                            <td><span class="status status-pending">Chưa làm</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- SECTION: Architecture Diagram -->
+            <section id="arch-diagram">
+                <h3>Sơ đồ Kiến trúc Hệ thống (Architecture Diagram)</h3>
+                <div class="diagram-container">
+                    <!-- Embedded SVG System Architecture Diagram -->
+                    <svg viewBox="0 0 920 520" width="920" height="520" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Styles for SVG Elements -->
+                        <style>
+                            .bg-box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+                            .bg-boundary { fill: #f8fafc; stroke: #94a3b8; stroke-dasharray: 6,4; stroke-width: 1.5; }
+                            .header-title { font-family: sans-serif; font-size: 14px; font-weight: bold; fill: #0f172a; }
+                            .boundary-title { font-family: sans-serif; font-size: 13px; font-weight: bold; fill: #475569; }
+                            .node-rect { stroke-width: 1.5; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.03)); }
+                            .node-text { font-family: sans-serif; font-size: 11px; font-weight: 600; fill: #ffffff; }
+                            .node-subtext { font-family: sans-serif; font-size: 10px; fill: #f8fafc; }
+                            .arrow-line { stroke: #64748b; stroke-width: 2; fill: none; stroke-linecap: round; }
+                            .arrow-line-active { stroke: #3b82f6; stroke-width: 2; fill: none; stroke-linecap: round; }
+                            .arrow-line-success { stroke: #10b981; stroke-width: 2; fill: none; stroke-linecap: round; }
+                            .label-text { font-family: sans-serif; font-size: 10px; font-weight: 600; fill: #334155; }
+                            .circle-badge { fill: #3b82f6; stroke: #ffffff; stroke-width: 1.5; }
+                            .circle-badge-text { font-family: sans-serif; font-size: 10px; font-weight: bold; fill: #ffffff; }
+                        </style>
+
+                        <!-- Define Arrow Marker -->
+                        <defs>
+                            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748b" />
+                            </marker>
+                            <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3b82f6" />
+                            </marker>
+                            <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />
+                            </marker>
+                        </defs>
+
+                        <!-- BOUNDARY 1: External Platform (Mello/Mezon) -->
+                        <rect x="15" y="40" width="240" height="440" rx="8" class="bg-boundary" />
+                        <text x="30" y="62" class="boundary-title">EXTERNAL SYSTEMS (MELLO)</text>
+
+                        <!-- Node 1: Mello Board / Comments -->
+                        <rect x="35" y="90" width="200" height="70" rx="6" fill="#f59e0b" stroke="#d97706" class="node-rect" />
+                        <text x="50" y="115" class="node-text">Mello Board UI</text>
+                        <text x="50" y="132" class="node-subtext" fill="#fef3c7">Bảng công việc & bình luận</text>
+                        <text x="50" y="145" class="node-subtext" fill="#fef3c7">Người dùng viết /run ...</text>
+
+                        <!-- Node 2: Webhook Publisher -->
+                        <rect x="35" y="210" width="200" height="70" rx="6" fill="#d97706" stroke="#b45309" class="node-rect" />
+                        <text x="50" y="235" class="node-text">Webhook Publisher</text>
+                        <text x="50" y="252" class="node-subtext" fill="#fef3c7">Phát sự kiện khi thẻ có comment</text>
+                        <text x="50" y="265" class="node-subtext" fill="#fef3c7">Kèm chữ ký bảo mật HMAC</text>
+
+                        <!-- Node 3: Mello Hosted MCP Endpoint -->
+                        <rect x="35" y="370" width="200" height="70" rx="6" fill="#b45309" stroke="#78350f" class="node-rect" />
+                        <text x="50" y="395" class="node-text">Hosted MCP Server</text>
+                        <text x="50" y="412" class="node-subtext" fill="#fee2e2">Giao diện kết nối MCP (SSE/HTTP)</text>
+                        <text x="50" y="425" class="node-subtext" fill="#fee2e2">Hỗ trợ write-back qua công cụ</text>
+
+
+                        <!-- BOUNDARY 2: Central Server Zone -->
+                        <rect x="295" y="40" width="300" height="440" rx="8" fill="#f1f5f9" stroke="#475569" stroke-dasharray="6,4" stroke-width="1.5" />
+                        <text x="310" y="62" class="boundary-title">MEWORK CENTRAL SERVER</text>
+
+                        <!-- Node 4: Chi Router & Inbound Webhook Adapter -->
+                        <rect x="315" y="90" width="260" height="70" rx="6" fill="#6366f1" stroke="#4f46e5" class="node-rect" />
+                        <text x="330" y="115" class="node-text">Inbound Webhook Adapter</text>
+                        <text x="330" y="132" class="node-subtext" fill="#e0e7ff">Router chi + Trình phân tích Provider</text>
+                        <text x="330" y="145" class="node-subtext" fill="#e0e7ff">Xác thực HMAC & chuyển sang Canonical</text>
+
+                        <!-- Node 5: PostgreSQL Database Queue & States -->
+                        <rect x="315" y="210" width="260" height="75" rx="6" fill="#4f46e5" stroke="#3730a3" class="node-rect" />
+                        <text x="330" y="232" class="node-text">PostgreSQL DB & Job Queue</text>
+                        <text x="330" y="249" class="node-subtext" fill="#e0e7ff">Hàng đợi Job, Runtimes, Profiles</text>
+                        <text x="330" y="262" class="node-subtext" fill="#e0e7ff">Composite Unique Key (Idempotency)</text>
+                        <text x="330" y="275" class="node-subtext" fill="#e0e7ff">Khóa Advisory Locks cho claims</text>
+
+                        <!-- Node 6: Outbound Adapter & Durable Outbox -->
+                        <rect x="315" y="370" width="260" height="70" rx="6" fill="#3730a3" stroke="#1e1b4b" class="node-rect" />
+                        <text x="330" y="395" class="node-text">Outbound MCP WriteBack</text>
+                        <text x="330" y="412" class="node-subtext" fill="#e0e7ff">MCP client (SSE) + Hàng đợi Outbox</text>
+                        <text x="330" y="425" class="node-subtext" fill="#e0e7ff">Mã hóa AES-256-GCM các bí mật</text>
+
+
+                        <!-- BOUNDARY 3: Local Developer Machine -->
+                        <rect x="635" y="40" width="270" height="440" rx="8" class="bg-boundary" />
+                        <text x="650" y="62" class="boundary-title">LOCAL DEVELOPER WORKSPACE</text>
+
+                        <!-- Node 7: MeWork Daemon Poller -->
+                        <rect x="655" y="90" width="230" height="70" rx="6" fill="#0ea5e9" stroke="#0284c7" class="node-rect" />
+                        <text x="670" y="115" class="node-text">MeWork Daemon Client</text>
+                        <text x="670" y="132" class="node-subtext" fill="#e0f2fe">Long-Polling GET /v1/jobs/next</text>
+                        <text x="670" y="145" class="node-subtext" fill="#e0f2fe">Xác thực bằng rt_token nội bộ</text>
+
+                        <!-- Node 8: Agent Sandbox Process Runner -->
+                        <rect x="655" y="210" width="230" height="70" rx="6" fill="#0284c7" stroke="#0369a1" class="node-rect" />
+                        <text x="670" y="235" class="node-text">Agent Runner (agentrun)</text>
+                        <text x="670" y="252" class="node-subtext" fill="#e0f2fe">Cách ly thư mục làm việc cục bộ</text>
+                        <text x="670" y="265" class="node-subtext" fill="#e0f2fe">Truyền chỉ dẫn an toàn qua stdin</text>
+
+                        <!-- Node 9: Local Agent CLI Engines -->
+                        <rect x="655" y="370" width="230" height="70" rx="6" fill="#0369a1" stroke="#075985" class="node-rect" />
+                        <text x="670" y="395" class="node-text">Local AI Engines</text>
+                        <text x="670" y="412" class="node-subtext" fill="#e0f2fe">Claude Code, Codex, OpenCode CLI</text>
+                        <text x="670" y="425" class="node-subtext" fill="#e0f2fe">Truy cập mã nguồn gốc cục bộ</text>
+
+
+                        <!-- ARCHITECTURE DATA FLOW ARROWS -->
+
+                        <!-- Flow 1: User comments /run -> triggers Webhook -->
+                        <path d="M 135 160 L 135 210" class="arrow-line" marker-end="url(#arrow)" />
+
+                        <!-- Flow 2: Webhook -> Inbound Adapter (Verify Signature) -->
+                        <path d="M 235 245 L 315 125" class="arrow-line-active" marker-end="url(#arrow-blue)" />
+                        <text x="245" y="180" class="label-text">1. POST Webhook</text>
+
+                        <!-- Flow 3: Inbound Adapter normalize -> Enqueue Job -->
+                        <path d="M 445 160 L 445 210" class="arrow-line" marker-end="url(#arrow)" />
+
+                        <!-- Flow 4: Daemon long-poll /v1/jobs/next -> Job Queue (claim with advisory lock) -->
+                        <path d="M 655 135 L 578 222" class="arrow-line-active" marker-end="url(#arrow-blue)" />
+                        <text x="582" y="160" class="label-text">2. Long Poll (claim)</text>
+
+                        <!-- Flow 6: Process Job internally in Daemon -->
+                        <path d="M 770 160 L 770 210" class="arrow-line" marker-end="url(#arrow)" />
+
+                        <!-- Flow 7: Run agent execution via stdin pipe -->
+                        <path d="M 770 280 L 770 370" class="arrow-line" marker-end="url(#arrow)" />
+                        <text x="780" y="325" class="label-text">3. stdin</text>
+
+                        <!-- Flow 8: Send results / ACK back to server -->
+                        <path d="M 655 245 L 575 245" class="arrow-line-success" marker-end="url(#arrow-green)" />
+                        <text x="590" y="235" class="label-text" fill="#10b981">4. POST Ack</text>
+
+                        <!-- Flow 9: Writeback enqueued & picked by outbox worker -->
+                        <path d="M 445 285 L 445 370" class="arrow-line-success" marker-end="url(#arrow-green)" />
+
+                        <!-- Flow 10: Call hosted MCP writeback -->
+                        <path d="M 315 405 L 235 405" class="arrow-line-success" marker-end="url(#arrow-green)" />
+                        <text x="245" y="395" class="label-text" fill="#10b981">5. WriteBack</text>
+
+                        <!-- Flow 11: MCP updates Kanban board -->
+                        <path d="M 135 370 L 135 160" class="arrow-line-success" stroke-dasharray="4,4" marker-end="url(#arrow-green)" />
+                        <text x="75" y="340" class="label-text" fill="#10b981">6. Update UI</text>
+                    </svg>
+                </div>
+            </section>
+
+            <!-- SECTION: Sequence Flow -->
+            <section id="arch-sequence">
+                <h3>Luồng tuần tự chi tiết (Sequence Flows)</h3>
+                <div class="step-list">
+                    <div class="step-item">
+                        <div class="step-badge">1</div>
+                        <div class="step-title">Gửi Webhook & Xác thực Đầu vào</div>
+                        <p>Webhook được bắn từ bảng Kanban Mello tới MeWork Server. Ở tầng Inbound Adapter, server xác thực tính hợp lệ bằng khóa bí mật HMAC cấu hình trong bảng <code>provider_connections</code>. Nếu thành công và phát hiện đúng cú pháp trigger <code>/run</code>, server trích xuất dữ liệu thành thực thể CanonicalEvent.</p>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-badge">2</div>
+                        <div class="step-title">Xếp hàng & Giải quyết tranh chấp (Advisory Lock)</div>
+                        <p>CanonicalEvent được nạp các thông tin bổ sung từ Profile (bao gồm chỉ dẫn prompt gốc và cấu hình workflow) rồi lưu vào cơ sở dữ liệu Postgres ở trạng thái <code>queued</code>. Ràng buộc composite unique giúp lọc trùng lặp webhook gửi lỗi.</p>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-badge">3</div>
+                        <div class="step-title">Báo nhận & Cho thuê Job (Lease Claim)</div>
+                        <p>Daemon máy trạm thực hiện long-poll <code>/v1/jobs/next</code>. Server kiểm tra danh tính runtime và áp dụng khóa Advisory Lock trên dòng của PostgreSQL để cập nhật trạng thái Job từ <code>queued</code> sang <code>claimed</code> và gán nhãn thời gian thuê (lease) giới hạn. Nếu có nhiều Daemon cùng poll một lúc, cơ chế đảm bảo chỉ có duy nhất một Daemon nhận được Job.</p>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-badge">4</div>
+                        <div class="step-title">Thực thi Sandbox & Cập nhật nhịp tim</div>
+                        <p>Daemon cục bộ tải Job về, tạo thư mục cách ly <code>~/.mework/work/[job-id]</code>, khởi chạy AI Agent CLI bằng luồng dữ liệu stdin. Trong quá trình chạy, một luồng phụ liên tục gửi heartbeat lên server để gia hạn quyền chiếm giữ Job (lease), ngăn ngừa các máy trạm khác cướp Job.</p>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-badge">5</div>
+                        <div class="step-title">Báo cáo kết quả & Ghi ngược (Outbox)</div>
+                        <p>Khi AI chạy xong (hoặc thất bại), Daemon gửi báo cáo ACK kèm trạng thái (<code>done</code> hoặc <code>failed</code>) và tóm tắt kết quả về Server. Server ghi nhận trạng thái Job đã hoàn thành, đồng thời tạo một bản ghi outbox ghi ngược kết quả (WriteBack). Tiến trình phụ (Outbox Worker) trên server sẽ tự động kết nối tới MCP Server ngoại vi để viết bình luận phản hồi kết quả lên Kanban board.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: DB Schema -->
+            <section id="arch-db">
+                <h3>Thiết kế Cơ sở dữ liệu (Database Schema)</h3>
+                <p>
+                    Cơ sở dữ liệu sử dụng PostgreSQL để hỗ trợ cơ chế lưu trữ hàng đợi tác vụ bền vững, kiểm soát trạng thái tranh chấp đồng thời và mã hóa bí mật kết nối dịch vụ ngoại vi. Dưới đây là cấu trúc các bảng dữ liệu chính (được viết trong Goose migration <code>000001_init.sql</code>):
+                </p>
+
+                <h4>1. Bảng <code>accounts</code> (Tài khoản người dùng)</h4>
+                <p>Lưu trữ thực thể tài khoản chính sở hữu các kết nối và runtimes.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên trường</th>
+                            <th>Kiểu dữ liệu</th>
+                            <th>Mô tả / Ràng buộc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>id</code></td>
+                            <td>UUID</td>
+                            <td>PRIMARY KEY, DEFAULT gen_random_uuid()</td>
+                        </tr>
+                        <tr>
+                            <td><code>name</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Tên người dùng (không được NULL)</td>
+                        </tr>
+                        <tr>
+                            <td><code>created_at</code></td>
+                            <td>TIMESTAMPTZ</td>
+                            <td>Thời gian tạo tài khoản</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>2. Bảng <code>provider_connections</code> (Kết nối dịch vụ ngoại vi)</h4>
+                <p>Lưu thông tin khóa webhook, URL MCP của từng nhà cung cấp nhiệm vụ tương ứng với tài khoản người dùng.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên trường</th>
+                            <th>Kiểu dữ liệu</th>
+                            <th>Mô tả / Ràng buộc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>id</code></td>
+                            <td>UUID</td>
+                            <td>PRIMARY KEY</td>
+                        </tr>
+                        <tr>
+                            <td><code>account_id</code></td>
+                            <td>UUID</td>
+                            <td>FOREIGN KEY references accounts(id) ON DELETE CASCADE</td>
+                        </tr>
+                        <tr>
+                            <td><code>provider_code</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Mã nhà cung cấp (ví dụ: 'mello', 'github', 'jira')</td>
+                        </tr>
+                        <tr>
+                            <td><code>webhook_secret</code></td>
+                            <td>TEXT</td>
+                            <td>Khóa xác thực chữ ký số webhook</td>
+                        </tr>
+                        <tr>
+                            <td><code>mcp_url</code></td>
+                            <td>TEXT</td>
+                            <td>Địa chỉ endpoint MCP dùng để ghi ngược (WriteBack)</td>
+                        </tr>
+                        <tr>
+                            <td><code>mcp_auth_enc</code></td>
+                            <td>TEXT</td>
+                            <td>Khóa xác thực MCP đã được mã hóa đối xứng AES-256-GCM</td>
+                        </tr>
+                        <tr>
+                            <td><code>config</code></td>
+                            <td>JSONB</td>
+                            <td>Cấu hình bổ sung riêng của Provider (mặc định '{}')</td>
+                        </tr>
+                        <tr>
+                            <td><code>UNIQUE (account_id, provider_code)</code></td>
+                            <td>Constraint</td>
+                            <td>Mỗi tài khoản chỉ kết nối tối đa 1 instance của một loại Provider</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>3. Bảng <code>account_identities</code> (Danh tính người dùng theo Provider)</h4>
+                <p>Ánh xạ ID người dùng trên hệ thống ngoại vi về tài khoản MeWork, phục vụ xác thực commenter (authz) trước khi tạo Job.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên trường</th>
+                            <th>Kiểu dữ liệu</th>
+                            <th>Mô tả / Ràng buộc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>account_id</code></td>
+                            <td>UUID</td>
+                            <td>FOREIGN KEY references accounts(id) ON DELETE CASCADE</td>
+                        </tr>
+                        <tr>
+                            <td><code>provider_code</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Mã nhà cung cấp ('mello', 'github', ...)</td>
+                        </tr>
+                        <tr>
+                            <td><code>external_user_id</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>ID người dùng trên hệ thống ngoại vi</td>
+                        </tr>
+                        <tr>
+                            <td><code>PRIMARY KEY (account_id, provider_code)</code></td>
+                            <td>Constraint</td>
+                            <td>Mỗi tài khoản có 1 danh tính trên mỗi Provider</td>
+                        </tr>
+                        <tr>
+                            <td><code>UNIQUE (provider_code, external_user_id)</code></td>
+                            <td>Constraint</td>
+                            <td>Tra cứu ngược: ID ngoại vi → account (chống mạo danh)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>4. Bảng <code>watched_containers</code> (Container được giám sát)</h4>
+                <p>Ánh xạ board/project/repo trên hệ thống ngoại vi về tài khoản. Cốt lõi để webhook resolve được Job thuộc account nào (fail-closed nếu không khớp).</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên trường</th>
+                            <th>Kiểu dữ liệu</th>
+                            <th>Mô tả / Ràng buộc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>account_id</code></td>
+                            <td>UUID</td>
+                            <td>FOREIGN KEY references accounts(id) ON DELETE CASCADE</td>
+                        </tr>
+                        <tr>
+                            <td><code>provider_code</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Mã nhà cung cấp</td>
+                        </tr>
+                        <tr>
+                            <td><code>external_container_id</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>ID của board/project/repo trên hệ thống ngoại vi</td>
+                        </tr>
+                        <tr>
+                            <td><code>PRIMARY KEY (account_id, provider_code, external_container_id)</code></td>
+                            <td>Constraint</td>
+                            <td>Khóa chính tổng hợp 3 cột</td>
+                        </tr>
+                        <tr>
+                            <td><code>UNIQUE (provider_code, external_container_id)</code></td>
+                            <td>Constraint</td>
+                            <td>Một container chỉ thuộc duy nhất 1 account (resolve webhook → account)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>5. Bảng <code>runtimes</code> (Đại diện máy trạm Agent)</h4>
+                <p>Quản lý danh sách các thiết bị hoặc máy trạm chạy Daemon đã đăng ký nhận việc.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên trường</th>
+                            <th>Kiểu dữ liệu</th>
+                            <th>Mô tả / Ràng buộc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>id</code></td>
+                            <td>UUID</td>
+                            <td>PRIMARY KEY</td>
+                        </tr>
+                        <tr>
+                            <td><code>account_id</code></td>
+                            <td>UUID</td>
+                            <td>FOREIGN KEY</td>
+                        </tr>
+                        <tr>
+                            <td><code>code</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Mã runtime do người dùng đặt (ví dụ: 'macbook-pro')</td>
+                        </tr>
+                        <tr>
+                            <td><code>token_lookup</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Băm một chiều của rt_token phục vụ tìm kiếm nhanh O(1) [UNIQUE]</td>
+                        </tr>
+                        <tr>
+                            <td><code>status</code></td>
+                            <td>VARCHAR(50)</td>
+                            <td>Trạng thái (online, offline)</td>
+                        </tr>
+                        <tr>
+                            <td><code>UNIQUE (account_id, code)</code></td>
+                            <td>Constraint</td>
+                            <td>Mỗi tài khoản không được trùng mã runtime</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>6. Bảng <code>profiles</code> (Cấu hình chỉ dẫn &amp; Workflow)</h4>
+                <p>Lưu trữ các bộ prompt nghiệp vụ (system prompt) cùng cấu hình harness/workflow trên server, được snapshot vào Job tại thời điểm enqueue.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên trường</th>
+                            <th>Kiểu dữ liệu</th>
+                            <th>Mô tả / Ràng buộc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>id</code></td>
+                            <td>UUID</td>
+                            <td>PRIMARY KEY</td>
+                        </tr>
+                        <tr>
+                            <td><code>account_id</code></td>
+                            <td>UUID</td>
+                            <td>FOREIGN KEY references accounts(id) ON DELETE CASCADE</td>
+                        </tr>
+                        <tr>
+                            <td><code>name</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Tên profile do người dùng đặt</td>
+                        </tr>
+                        <tr>
+                            <td><code>body</code></td>
+                            <td>TEXT</td>
+                            <td>Nội dung prompt nghiệp vụ (markdown)</td>
+                        </tr>
+                        <tr>
+                            <td><code>backend_hint</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Gợi ý backend AI ưu tiên (có thể NULL)</td>
+                        </tr>
+                        <tr>
+                            <td><code>harness</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>Loại harness mục tiêu (ví dụ: 'claude-code')</td>
+                        </tr>
+                        <tr>
+                            <td><code>workflow_config</code></td>
+                            <td>JSONB</td>
+                            <td>Cấu hình workflow (allowed tools, template…), mặc định '{}'</td>
+                        </tr>
+                        <tr>
+                            <td><code>UNIQUE (account_id, name)</code></td>
+                            <td>Constraint</td>
+                            <td>Mỗi tài khoản không được trùng tên profile</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>7. Bảng <code>jobs</code> (Hàng đợi công việc chi tiết)</h4>
+                <p>Nơi lưu giữ trạng thái, nội dung ticket, kết quả thực thi và lịch sử ghi ngược.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên trường</th>
+                            <th>Kiểu dữ liệu</th>
+                            <th>Mô tả / Ràng buộc</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>id</code></td>
+                            <td>UUID</td>
+                            <td>PRIMARY KEY</td>
+                        </tr>
+                        <tr>
+                            <td><code>runtime_id</code></td>
+                            <td>UUID</td>
+                            <td>FOREIGN KEY references runtimes(id)</td>
+                        </tr>
+                        <tr>
+                            <td><code>external_task_id</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>ID của ticket trên hệ thống ngoại vi (ví dụ: ticket Mello)</td>
+                        </tr>
+                        <tr>
+                            <td><code>external_event_id</code></td>
+                            <td>VARCHAR(255)</td>
+                            <td>ID của comment/sự kiện trigger kích hoạt (Idempotency Key)</td>
+                        </tr>
+                        <tr>
+                            <td><code>status</code></td>
+                            <td>VARCHAR(50)</td>
+                            <td>Trạng thái Job: queued, claimed, running, done, failed</td>
+                        </tr>
+                        <tr>
+                            <td><code>writeback_status</code></td>
+                            <td>VARCHAR(50)</td>
+                            <td>Trạng thái outbox: pending, processing, done, failed</td>
+                        </tr>
+                        <tr>
+                            <td><code>instructions</code></td>
+                            <td>TEXT</td>
+                            <td>Nội dung chỉ dẫn người dùng viết sau từ khóa trigger</td>
+                        </tr>
+                        <tr>
+                            <td><code>claim_lease_until</code></td>
+                            <td>TIMESTAMPTZ</td>
+                            <td>Thời hạn cho thuê Job (được gia hạn liên tục bằng Heartbeat)</td>
+                        </tr>
+                        <tr>
+                            <td><code>UNIQUE (provider_code, external_event_id)</code></td>
+                            <td>Constraint</td>
+                            <td>Ngăn cản tạo trùng Job khi webhook gửi lại nhiều lần</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Các chỉ mục tối ưu hiệu năng (Database Indexes)</h4>
+                <pre><code>-- Chỉ mục phục vụ truy vấn kéo tác vụ cực nhanh (claim query)
+CREATE INDEX idx_jobs_claim ON jobs (runtime_id, status, created_at);
+
+-- Ràng buộc mềm ngăn chặn một runtime chạy 2 jobs song song đồng thời
+CREATE UNIQUE INDEX idx_jobs_one_active_per_runtime ON jobs (runtime_id)
+WHERE status IN ('claimed', 'running');
+
+-- Chỉ mục lọc outbox phục vụ worker ghi ngược
+CREATE INDEX idx_jobs_writeback ON jobs (writeback_status)
+WHERE writeback_status = 'pending';</code></pre>
+            </section>
+
+            <!-- SECTION: Security -->
+            <section id="arch-security">
+                <h3>Cơ chế Bảo mật (Security Implementations)</h3>
+                <div class="callout warning">
+                    <h4>Cơ chế Mã hóa đối xứng AES-256-GCM của Secrets</h4>
+                    <p>
+                        Các thông tin nhạy cảm của người dùng (chẳng hạn như khóa API hoặc token kết nối MCP trong bảng <code>provider_connections.mcp_auth_enc</code>) được bảo mật nghiêm ngặt bằng phương pháp mã hóa đối xứng AES-256-GCM.
+                    </p>
+                    <p>
+                        Khóa mã hóa <code>MEWORK_SECRET_KEY</code> là khóa 32-byte được nạp từ biến môi trường của máy chủ. Khi ghi thông tin kết nối, máy chủ sẽ sinh ra một chuỗi ngẫu nhiên <code>nonce</code> (12-byte), thực hiện mã hóa thông tin và ghép nonce ở đầu bản mã trước khi lưu trữ vào DB. Tiến trình WriteBack giải mã bản mã này trước khi tạo kết nối tới MCP Server ngoại vi.
+                    </p>
+                </div>
+            </section>
+
+            <!-- SECTION: CLI Reference -->
+            <section id="ops-cli">
+                <h2>4. Hướng dẫn & Vận hành</h2>
+                <h3>CLI Command Reference (Lệnh điều khiển <code>mework</code>)</h3>
+                <p>
+                    Công cụ CLI <code>mework</code> hỗ trợ ba nhóm lệnh chính phục vụ phát triển, vận hành và cấu hình hệ thống:
+                </p>
+
+                <h4>1. Nhóm lệnh lõi (Core Commands)</h4>
+                <ul>
+                    <li><code>mework login --token &lt;token&gt;</code>: Xác thực tài khoản của bạn với hệ thống Mello bằng Personal Access Token.</li>
+                    <li><code>mework logout</code>: Đăng xuất, xóa cấu hình token cục bộ.</li>
+                    <li><code>mework board list</code>: Liệt kê danh sách các bảng công việc đang được quản lý.</li>
+                    <li><code>mework ticket list --board-id &lt;id&gt;</code>: Liệt kê các ticket đang có trên một bảng cụ thể.</li>
+                    <li><code>mework ticket get &lt;ticket-id&gt;</code>: Xem chi tiết nội dung mô tả, tiêu đề và bình luận của ticket.</li>
+                </ul>
+
+                <h4>2. Nhóm lệnh Runtime & Daemon (Từ Phase 2 trở đi)</h4>
+                <ul>
+                    <li><code>mework runtime add --code &lt;code&gt; --label &lt;name&gt;</code>: Đăng ký một thực thể máy trạm và nhận khóa <code>rt_token</code>.</li>
+                    <li><code>mework daemon start [--foreground]</code>: Khởi chạy Daemon xử lý tác vụ ngầm (hoặc chạy nổi hiển thị log).</li>
+                    <li><code>mework daemon status</code>: Kiểm tra trạng thái hoạt động của daemon cục bộ (hiển thị PID và cổng Health).</li>
+                    <li><code>mework daemon stop</code>: Dừng daemon một cách an toàn thông qua cổng Health nội bộ.</li>
+                    <li><code>mework daemon logs [-f]</code>: Đọc và theo dõi tệp nhật ký ghi chép của daemon tại máy trạm.</li>
+                </ul>
+
+                <h4>3. Nhóm lệnh Quản lý Profile (Từ Phase 4 trở đi)</h4>
+                <ul>
+                    <li><code>mework profile add --name &lt;name&gt; --file &lt;path&gt;</code>: Tải lên cấu hình profile (prompt nghiệp vụ) từ file markdown lên server trung tâm để sẵn sàng nhúng vào Job.</li>
+                    <li><code>mework profile list</code>: Danh sách các profile có trên tài khoản.</li>
+                </ul>
+            </section>
+
+            <!-- SECTION: Environment config -->
+            <section id="ops-env">
+                <h3>Cấu hình Môi trường (Environment Variables)</h3>
+                <p>
+                    Để vận hành máy chủ MeWork Server (<code>mework-server</code>), cần nạp đầy đủ các biến môi trường sau đây:
+                </p>
+                <pre><code># Địa chỉ kết nối cơ sở dữ liệu PostgreSQL
+DATABASE_URL=postgres://user:password@localhost:5432/mework_db?sslmode=disable
+
+# Địa chỉ và Cổng lắng nghe HTTP của Server
+LISTEN_ADDR=0.0.0.0:8080
+
+# Khóa bí mật dùng để mã hóa thông tin kết nối MCP (yêu cầu khóa base64 32-byte)
+MEWORK_SECRET_KEY=y3S1eWN1cmVTZWNyZXRLZXlGb3JNZVdvcmtBZXMyNTZHQ00=</code></pre>
+            </section>
+        </main>
+    </div>
+
+    <!-- Active Menu Link Highlighter Script -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(entry => {
+                    const id = entry.target.getAttribute('id');
+                    if (entry.intersectionRatio > 0.3) {
+                        document.querySelectorAll('aside nav ul li a').forEach(a => {
+                            if (a.getAttribute('href') === `#${id}`) {
+                                a.classList.add('active');
+                            } else {
+                                a.classList.remove('active');
+                            }
+                        });
+                    }
+                });
+            }, { threshold: [0.1, 0.3, 0.5, 0.8] });
+
+            // Track all sections with an id
+            document.querySelectorAll('section[id]').forEach(section => {
+                observer.observe(section);
+            });
+        });
+    </script>
+</body>
+</html>

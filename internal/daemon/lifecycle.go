@@ -1,5 +1,5 @@
-// Package daemon implements the Mello agent-runtime daemon: process
-// lifecycle (pid/log/health) plus the poll-based trigger loop.
+// Package daemon implements the mework agent-runtime daemon: process
+// lifecycle (pid/log/health) plus the server poll-based consumer loop.
 package daemon
 
 import (

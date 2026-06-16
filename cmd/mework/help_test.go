@@ -17,7 +17,7 @@ func TestMaskToken(t *testing.T) {
 
 func TestConfigKeysWhitelist(t *testing.T) {
 	// Known keys must be present; an unknown key must be absent.
-	for _, key := range []string{"base_url", "workspace_id", "mcp_url", "daemon.trigger_keyword", "daemon.done_column_id"} {
+	for _, key := range []string{"base_url", "workspace_id", "server_url", "rt_token", "daemon.trigger_keyword", "daemon.done_column_id"} {
 		if _, ok := configKeys[key]; !ok {
 			t.Errorf("expected %q in configKeys whitelist", key)
 		}

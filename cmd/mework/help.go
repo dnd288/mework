@@ -23,6 +23,11 @@ func registerCommands() {
 	authCmd.GroupID = groupAdditional
 	rootCmd.AddCommand(loginCmd, authCmd)
 
+	providerCmd.GroupID = groupAdditional
+	runtimeCmd.GroupID = groupRuntime
+	profileCmd.GroupID = groupRuntime
+	rootCmd.AddCommand(providerCmd, runtimeCmd, profileCmd)
+
 	for _, c := range []*cobra.Command{workspaceCmd, boardCmd, ticketCmd, commentCmd, searchCmd} {
 		c.GroupID = groupCore
 		rootCmd.AddCommand(c)
@@ -49,6 +54,7 @@ var configShowCmd = &cobra.Command{
 		// Mask the token before display.
 		masked := *cfg
 		masked.Token = maskToken(cfg.Token)
+		masked.RuntimeToken = maskToken(cfg.RuntimeToken)
 		out, err := json.MarshalIndent(masked, "", "  ")
 		if err != nil {
 			return err
@@ -66,14 +72,15 @@ func init() {
 var configKeys = map[string]func(*cli.Config, string){
 	"base_url":               func(c *cli.Config, v string) { c.BaseURL = v },
 	"workspace_id":           func(c *cli.Config, v string) { c.WorkspaceID = v },
-	"mcp_url":                func(c *cli.Config, v string) { c.MCPURL = v },
+	"server_url":             func(c *cli.Config, v string) { c.ServerURL = v },
+	"rt_token":               func(c *cli.Config, v string) { c.RuntimeToken = v },
 	"daemon.trigger_keyword": func(c *cli.Config, v string) { c.Daemon.TriggerKeyword = v },
 	"daemon.done_column_id":  func(c *cli.Config, v string) { c.Daemon.DoneColumnID = v },
 }
 
 var configSetCmd = &cobra.Command{
 	Use:   "set <key> <value>",
-	Short: "Set a config value (keys: base_url, workspace_id, mcp_url, daemon.trigger_keyword, daemon.done_column_id)",
+	Short: "Set a config value (keys: base_url, workspace_id, server_url, rt_token, daemon.trigger_keyword, daemon.done_column_id)",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key, value := args[0], args[1]
@@ -81,7 +88,7 @@ var configSetCmd = &cobra.Command{
 		if !ok {
 			return fmt.Errorf("unknown config key %q", key)
 		}
-		if key == "mcp_url" || key == "base_url" {
+		if key == "server_url" || key == "base_url" {
 			if u, err := url.ParseRequestURI(value); err != nil || u.Scheme == "" {
 				return fmt.Errorf("%s must be a valid URL", key)
 			}

@@ -24,11 +24,12 @@ type DaemonConfig struct {
 
 // Config is the on-disk CLI/daemon configuration for a profile.
 type Config struct {
-	BaseURL     string       `json:"base_url,omitempty"`
-	WorkspaceID string       `json:"workspace_id,omitempty"`
-	Token       string       `json:"token,omitempty"`
-	MCPURL      string       `json:"mcp_url,omitempty"`
-	Daemon      DaemonConfig `json:"daemon,omitempty"`
+	BaseURL      string       `json:"base_url,omitempty"`
+	WorkspaceID  string       `json:"workspace_id,omitempty"`
+	Token        string       `json:"token,omitempty"`
+	ServerURL    string       `json:"server_url,omitempty"`
+	RuntimeToken string       `json:"rt_token,omitempty"`
+	Daemon       DaemonConfig `json:"daemon,omitempty"`
 }
 
 // LoadConfig reads the profile config from disk. A missing file yields a

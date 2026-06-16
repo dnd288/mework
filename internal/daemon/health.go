@@ -9,7 +9,7 @@ import (
 )
 
 // HealthServer is a loopback HTTP server that exposes /health and /shutdown so
-// the `mello daemon stop` command can request a graceful shutdown.
+// the `mework daemon stop` command can request a graceful shutdown.
 type HealthServer struct {
 	srv    *http.Server
 	cancel context.CancelFunc

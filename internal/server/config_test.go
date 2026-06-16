@@ -11,12 +11,16 @@ func TestLoadConfig(t *testing.T) {
 	oldAddr := os.Getenv("LISTEN_ADDR")
 	oldSecret := os.Getenv("WEBHOOK_SECRET")
 	oldKey := os.Getenv("SERVER_KEY")
+	oldMeworkSecret := os.Getenv("MEWORK_SECRET_KEY")
+	oldMello := os.Getenv("MELLO_BASE_URL")
 
 	defer func() {
 		os.Setenv("DATABASE_URL", oldDB)
 		os.Setenv("LISTEN_ADDR", oldAddr)
 		os.Setenv("WEBHOOK_SECRET", oldSecret)
 		os.Setenv("SERVER_KEY", oldKey)
+		os.Setenv("MEWORK_SECRET_KEY", oldMeworkSecret)
+		os.Setenv("MELLO_BASE_URL", oldMello)
 	}()
 
 	// Clear variables for test
@@ -24,6 +28,8 @@ func TestLoadConfig(t *testing.T) {
 	os.Unsetenv("LISTEN_ADDR")
 	os.Unsetenv("WEBHOOK_SECRET")
 	os.Unsetenv("SERVER_KEY")
+	os.Unsetenv("MEWORK_SECRET_KEY")
+	os.Unsetenv("MELLO_BASE_URL")
 
 	// Test missing DATABASE_URL
 	_, err := LoadConfig()
@@ -38,8 +44,15 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatal("expected error when SERVER_KEY is missing")
 	}
 
-	// Set both
+	// Set SERVER_KEY, test missing MEWORK_SECRET_KEY
 	os.Setenv("SERVER_KEY", "super-secret-server-key-hmac-sha256-hash")
+	_, err = LoadConfig()
+	if err == nil {
+		t.Fatal("expected error when MEWORK_SECRET_KEY is missing")
+	}
+
+	// Set both
+	os.Setenv("MEWORK_SECRET_KEY", "mework-secret-key-aes-256")
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("unexpected error loading valid config: %v", err)
