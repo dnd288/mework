@@ -1,32 +1,36 @@
 package hub
 
 import (
+	"context"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mework/server/audit"
 	"mework/server/auth"
 	"mework/server/bus"
 	"mework/server/bus/memory"
 	"mework/server/catalog"
 	"mework/server/connection"
 	"mework/server/middleware"
+	"mework/server/notify"
 	"mework/server/orchestrator"
 	"mework/server/provider"
 	melloprovider "mework/server/provider/mello"
-	"mework/server/quota"
 	"mework/server/registry"
 	"mework/server/webhook"
 	"mework/shared/grant"
 )
 
 type Server struct {
-	Router *chi.Mux
-	Pool   *pgxpool.Pool
-	Config *Config
+	Router              *chi.Mux
+	Pool                *pgxpool.Pool
+	Config              *Config
+	Notifier            *notify.Notifier
+	ArtifactHandlers    *ArtifactHandlers
 }
 
 func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
@@ -41,12 +45,7 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 
 	patAuth := auth.NewPATAuthenticator(pool, cfg.MelloBaseURL)
 	registrySvc := registry.NewService(pool, cfg.ServerKey)
-
-	// Create platform hardening services.
-	quotaSvc := quota.NewService(pool)
-	auditSvc := audit.NewService(pool)
-
-	registryHandlers := registry.NewHandlers(registrySvc, auditSvc)
+	registryHandlers := registry.NewHandlers(registrySvc)
 
 	connectionSvc := connection.NewService(pool, cfg.MeworkSecretKey)
 	connectionHandlers := connection.NewHandlers(connectionSvc)
@@ -59,7 +58,7 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 		msgBroker = memory.New()
 	}
 
-	agentHandlers := catalog.NewAgentHandlers(profileSvc, msgBroker, quotaSvc, auditSvc)
+	agentHandlers := catalog.NewAgentHandlers(profileSvc, msgBroker)
 	sseHandler := bus.NewSSEHandler(msgBroker)
 	msgAckHandler := bus.NewAckHandler(msgBroker)
 
@@ -80,6 +79,14 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 		r.Get("/subscribe", sseHandler.Subscribe)
 		r.Post("/messages/{msgID}/ack", msgAckHandler.Ack)
 	})
+
+	// Notifier for outbound notifications.
+	notifierSvc := notify.NewNotifier(pool)
+
+	// Artifact store (currently dummy; real ObjectStore-backed version
+	// activated once the object store is wired).
+	artifactStore := NewDummyArtifactStore()
+	artifactHandlers := NewArtifactHandlers(artifactStore)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(patAuth.Middleware)
@@ -106,10 +113,9 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 
 		r.Post("/runners/registration-tokens", registryHandlers.IssueRegistrationToken)
 
-		// Quota and audit admin endpoints.
-		r.Get("/quotas/{tenant_id}", quotaHandlers(quotaSvc).GetLimits)
-		r.Put("/quotas/{tenant_id}", quotaHandlers(quotaSvc).UpdateLimits)
-		r.Get("/audit/{tenant_id}", auditHandlers(auditSvc).QueryLog)
+		// Artifact endpoints: list artifacts for a run, download a single artifact.
+		r.Get("/runs/{runID}/artifacts", artifactHandlers.ListArtifacts)
+		r.Get("/runs/{runID}/artifacts/{name}", artifactHandlers.GetArtifact)
 	})
 
 	r.Post("/api/v1/runners/enroll", registryHandlers.EnrollRunner)
@@ -122,10 +128,15 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 		).Get("/{name}/versions/{version}/pull", agentHandlers.PullVersion)
 	})
 
+	// Start background notification retry sweeper.
+	startNotifySweeper(context.Background(), notifierSvc)
+
 	return &Server{
-		Router: r,
-		Pool:   pool,
-		Config: cfg,
+		Router:           r,
+		Pool:             pool,
+		Config:           cfg,
+		Notifier:         notifierSvc,
+		ArtifactHandlers: artifactHandlers,
 	}
 }
 
@@ -133,12 +144,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.Router.ServeHTTP(w, r)
 }
 
-// quotaHandlers creates a handler set for quota admin endpoints.
-func quotaHandlers(svc *quota.Service) *quota.HTTPHandlers {
-	return quota.NewHTTPHandlers(svc)
-}
+// startNotifySweeper launches a background goroutine that retries pending
+// notification deliveries every 30 seconds. It stops when the context is
+// cancelled.
+func startNotifySweeper(ctx context.Context, notifier *notify.Notifier) {
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
 
-// auditHandlers creates a handler set for audit admin endpoints.
-func auditHandlers(svc *audit.Service) *audit.HTTPHandlers {
-	return audit.NewHTTPHandlers(svc)
+		for {
+			select {
+			case <-ticker.C:
+				if err := notifier.RetryPending(ctx); err != nil {
+					log.Printf("Notification retry sweeper: %v", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }

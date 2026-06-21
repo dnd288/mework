@@ -83,6 +83,30 @@ type Hook struct {
 	Script string
 }
 
+// TenantID uniquely identifies a tenant in the system.
+type TenantID string
+
+// NotifyEvent is an event that triggers an outbound notification.
+type NotifyEvent struct {
+	Kind   string // "run.done" | "run.failed"
+	RunID  string
+	Target string // outbound webhook URL
+}
+
+// ArtifactRef identifies a run artifact.
+type ArtifactRef struct {
+	RunID    string
+	Name     string
+	Checksum string
+}
+
+// ArtifactInfo is metadata about a stored artifact.
+type ArtifactInfo struct {
+	Ref       ArtifactRef
+	Size      int64
+	CreatedAt string
+}
+
 // SandboxCaps describes what a sandbox engine can do.
 type SandboxCaps struct {
 	MaxMemoryMB    int

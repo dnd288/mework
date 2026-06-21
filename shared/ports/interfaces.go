@@ -6,6 +6,8 @@ package ports
 import (
 	"context"
 	"io"
+	"time"
+
 	"mework/shared/core"
 )
 
@@ -37,6 +39,8 @@ type ObjectStore interface {
 	Get(ctx context.Context, ref core.ObjectRef) (io.ReadCloser, error)
 	Delete(ctx context.Context, ref core.ObjectRef) error
 	List(ctx context.Context, prefix string) ([]core.ObjectInfo, error)
+	PresignGetURL(ctx context.Context, ref core.ObjectRef, ttl time.Duration) (string, error)
+	PresignPutURL(ctx context.Context, ref core.ObjectRef, ttl time.Duration) (string, error)
 }
 
 // AgentBackend detects and runs AI coding agents (CLI tools).
@@ -62,9 +66,30 @@ type ProviderAdapter interface {
 	// Add more adapter methods as needed by downstream consumers.
 }
 
-// Notifier sends notifications through various channels.
+// Notifier sends outbound notifications on platform events.
 type Notifier interface {
-	Notify(ctx context.Context, channel string, title, body string) error
+	Notify(ctx context.Context, tenant core.TenantID, event core.NotifyEvent) error
+	DeliveryStatus(ctx context.Context, runID string) ([]DeliveryResult, error)
+}
+
+// DeliveryResult records the outcome of a notification delivery attempt.
+type DeliveryResult struct {
+	ID           string `json:"id"`
+	RunID        string `json:"run_id"`
+	EventKind    string `json:"event_kind"`
+	Status       string `json:"status"`
+	AttemptCount int    `json:"attempt_count"`
+	LastStatus   int    `json:"last_status"`
+	LastError    string `json:"last_error"`
+}
+
+// ArtifactStore persists and serves run outputs/artifacts.
+type ArtifactStore interface {
+	Put(ctx context.Context, tenant core.TenantID, ref core.ArtifactRef, content []byte) error
+	Get(ctx context.Context, tenant core.TenantID, ref core.ArtifactRef) ([]byte, error)
+	List(ctx context.Context, tenant core.TenantID, runID string) ([]core.ArtifactInfo, error)
+	PresignGetURL(ctx context.Context, tenant core.TenantID, ref core.ArtifactRef, ttl time.Duration) (string, error)
+	PresignPutURL(ctx context.Context, tenant core.TenantID, ref core.ArtifactRef, ttl time.Duration) (string, error)
 }
 
 // Scheduler manages time-based dispatches of agents. Each schedule produces
