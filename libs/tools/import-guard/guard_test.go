@@ -3,7 +3,7 @@ package guard_test
 import (
 	"testing"
 
-	guard "mework/tools/import-guard"
+	guard "mework/libs/tools/import-guard"
 )
 
 func TestCheckImport_ModuleBoundaryGuard(t *testing.T) {
