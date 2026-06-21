@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
+
 	"mework/shared/core"
 )
 
@@ -45,12 +47,38 @@ type Sandbox interface {
 	Signals(ctx context.Context, sig string) error
 }
 
-// ObjectStore is a generic key-value blob store interface.
+// ObjectPresignURL represents a presigned URL with its expiry time.
+type ObjectPresignURL struct {
+	URL       string
+	ExpiresAt time.Time
+}
+
+// ObjectStore is a generic S3-compatible blob store interface.
 type ObjectStore interface {
-	Put(ctx context.Context, ref core.ObjectRef, reader io.Reader) error
-	Get(ctx context.Context, ref core.ObjectRef) (io.ReadCloser, error)
-	Delete(ctx context.Context, ref core.ObjectRef) error
-	List(ctx context.Context, prefix string) ([]core.ObjectInfo, error)
+	// PutObject stores an object identified by bucket and key.
+	PutObject(ctx context.Context, ref core.ObjectRef, reader io.Reader) error
+
+	// GetObject retrieves an object's contents.
+	GetObject(ctx context.Context, ref core.ObjectRef) (io.ReadCloser, error)
+
+	// HeadObject returns metadata for an object (size, ETag, last-modified).
+	// Returns core.ObjectDeleted when the object does not exist.
+	HeadObject(ctx context.Context, ref core.ObjectRef) (core.ObjectInfo, error)
+
+	// ListObjects returns objects whose key begins with the given prefix.
+	ListObjects(ctx context.Context, prefix string) ([]core.ObjectInfo, error)
+
+	// DeleteObject removes an object. Removing a non-existent object is not an error.
+	DeleteObject(ctx context.Context, ref core.ObjectRef) error
+
+	// PresignGetURL mints a presigned GET URL valid for the given TTL.
+	PresignGetURL(ctx context.Context, ref core.ObjectRef, ttl time.Duration) (ObjectPresignURL, error)
+
+	// PresignPutURL mints a presigned PUT URL valid for the given TTL.
+	PresignPutURL(ctx context.Context, ref core.ObjectRef, ttl time.Duration) (ObjectPresignURL, error)
+
+	// PutMultipart uploads a large object as ordered parts and returns the final ETag.
+	PutMultipart(ctx context.Context, ref core.ObjectRef, parts []io.Reader) (string, error)
 }
 
 // AgentBackend detects and runs AI coding agents (CLI tools).

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"mework/server/bus"
+	"mework/server/storage"
 )
 
 // Config holds the environment configuration for the mework server.
@@ -15,6 +16,9 @@ type Config struct {
 	ServerKey       string
 	MeworkSecretKey string
 	MelloBaseURL    string
+
+	// Storage configures the object storage backend.
+	Storage storage.Config
 
 	// Broker is an optional pre-configured message bus broker. When nil,
 	// NewServer creates a default in-memory broker. Tests that need to
@@ -36,8 +40,6 @@ func LoadConfig() (*Config, error) {
 	}
 
 	webhookSecret := os.Getenv("WEBHOOK_SECRET")
-	// For now we don't enforce webhook secret to be set in development,
-	// but it will be required in production. Let's make it optional but log/flag it later.
 
 	serverKey := os.Getenv("SERVER_KEY")
 	if serverKey == "" {
@@ -54,6 +56,25 @@ func LoadConfig() (*Config, error) {
 		melloBaseURL = "https://mello.mezon.vn/api/v1"
 	}
 
+	// Storage config from environment.
+	storageCfg := storage.Config{
+		Driver: storage.DriverName(os.Getenv("STORAGE_DRIVER")),
+		Endpoint:   os.Getenv("STORAGE_ENDPOINT"),
+		Region:     os.Getenv("STORAGE_REGION"),
+		Bucket:     os.Getenv("STORAGE_BUCKET"),
+		BasePath:   os.Getenv("STORAGE_BASE_PATH"),
+	}
+	storageCfg.Credentials.AccessKey = os.Getenv("STORAGE_ACCESS_KEY")
+	storageCfg.Credentials.SecretKey = os.Getenv("STORAGE_SECRET_KEY")
+
+	// Default to fs driver when no driver is specified.
+	if storageCfg.Driver == "" {
+		storageCfg.Driver = storage.DriverFS
+	}
+	if storageCfg.Bucket == "" {
+		storageCfg.Bucket = "mework"
+	}
+
 	return &Config{
 		DatabaseURL:     dbURL,
 		ListenAddr:      listenAddr,
@@ -61,5 +82,6 @@ func LoadConfig() (*Config, error) {
 		ServerKey:       serverKey,
 		MeworkSecretKey: meworkSecretKey,
 		MelloBaseURL:    melloBaseURL,
+		Storage:         storageCfg,
 	}, nil
 }
