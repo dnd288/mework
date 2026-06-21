@@ -503,13 +503,14 @@ if (local) {
 
   // Phase 5d: Archive — mv openspec/changes/<c>/ → openspec/changes/archive/YYYY-MM-DD-<c>/
   phase('Archive')
+  const archiveTarget = `openspec/changes/archive/${DATE}-${change}`
   if (archive) {
     archived = await agent(
       [
         `Archive OpenSpec change "${change}". ${skillNote('Archive')}`,
         `1. openspec list --json — confirm "${change}" is ACTIVE. If not active (already archived?), set archived=false, reason="already archived or not in active list — re-run is a no-op", STOP.`,
-        `2. Compute targetDir = "openspec/changes/archive/${DATE}-${change}". If targetDir already exists, archived=false, reason="target exists: <path>", STOP.`,
-        `3. mkdir -p openspec/changes/archive && mv openspec/changes/${change} "\${targetDir}".`,
+        `2. If the directory "${archiveTarget}" already exists, set archived=false, reason="target exists: ${archiveTarget}", STOP.`,
+        `3. mkdir -p openspec/changes/archive && mv "openspec/changes/${change}" "${archiveTarget}".`,
         `4. Create or append to openspec/changes/archive/INDEX.md (one row per archived change):`,
         `   | ${DATE} | ${change} | ${mergeResult.mergeSha} | <title from proposal.md> |`,
         `   (Use a markdown table with header row; create the file with the header row if it does not exist.)`,
@@ -549,7 +550,7 @@ if (local) {
         `   - major: (MAJOR+1).0.0`,
         `4. Compute newTag = "v\${MAJOR}.\${MINOR}.\${PATCH}".`,
         `5. If newTag already exists (git tag -l newTag), tagged=false, reason="tag already exists", STOP.`,
-        `6. git tag -a "${newTag}" -m "Release ${newTag}\n\nOpenSpec change: ${change}\nMerge: ${mergeResult.mergeSha}\nArchived: ${archived.archivePath || '(no-archive)'}\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"`,
+        `6. git tag -a "\${newTag}" -m "Release \${newTag}\n\nOpenSpec change: ${change}\nMerge: ${mergeResult.mergeSha}\nArchived: ${archived.archivePath || '(no-archive)'}\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"`,
         `7. git tag -n3 "${newTag}" → confirm the tag was created with the expected message.`,
         `Return the structured result. Do NOT push the tag — that is the Cleanup phase's job (only if --push-main).`,
       ].join('\n'),
