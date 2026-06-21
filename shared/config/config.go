@@ -24,6 +24,9 @@ type DaemonConfig struct {
 	DoneColumnID string `json:"done_column_id,omitempty"`
 	// Backends lists the AI CLIs to detect/use (e.g. claude, codex, opencode).
 	Backends []string `json:"backends,omitempty"`
+	// SandboxEngine selects the sandbox driver: "local" (default, host subprocess,
+	// no isolation), "docker" (container per agent), or "cloudflare" (remote Workers AI).
+	SandboxEngine string `json:"sandbox_engine,omitempty"`
 }
 
 // Config is the on-disk CLI/daemon configuration for a profile.

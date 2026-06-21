@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -14,9 +13,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"mework/client/subscribe"
-	"mework/sandbox/engine/local"
 	"mework/server/bus"
 	"mework/server/bus/memory"
+	"mework/shared/core"
 	"mework/shared/grant"
 	"mework/shared/transport"
 )
@@ -78,8 +77,8 @@ func TestDispatch_SuccessfulLifecycle(t *testing.T) {
 
 	// Override runAgent to return success (no real AI CLI needed).
 	origRunAgent := runAgent
-	runAgent = func(ctx context.Context, artifact *transport.Artifact) local.RunResult {
-		return local.RunResult{Output: "mock success", ExitCode: 0}
+	runAgent = func(ctx context.Context, artifact *transport.Artifact) core.Result {
+		return core.Result{Output: "mock success", ExitCode: 0}
 	}
 	defer func() { runAgent = origRunAgent }()
 
@@ -165,9 +164,9 @@ func TestDispatch_FailedRun(t *testing.T) {
 
 	// Override runAgent to return failure.
 	origRunAgent := runAgent
-	runAgent = func(ctx context.Context, artifact *transport.Artifact) local.RunResult {
-		return local.RunResult{
-			Err:      fmt.Errorf("agent crashed: OOM"),
+	runAgent = func(ctx context.Context, artifact *transport.Artifact) core.Result {
+		return core.Result{
+			Error:    "agent crashed: OOM",
 			ExitCode: 137,
 		}
 	}
@@ -248,12 +247,12 @@ func TestDispatch_AcknowledgesMessage(t *testing.T) {
 
 		origRunAgent := runAgent
 		if status == "done" {
-			runAgent = func(ctx context.Context, artifact *transport.Artifact) local.RunResult {
-				return local.RunResult{Output: "ok", ExitCode: 0}
+			runAgent = func(ctx context.Context, artifact *transport.Artifact) core.Result {
+				return core.Result{Output: "ok", ExitCode: 0}
 			}
 		} else {
-			runAgent = func(ctx context.Context, artifact *transport.Artifact) local.RunResult {
-				return local.RunResult{Err: fmt.Errorf("fail"), ExitCode: 1}
+			runAgent = func(ctx context.Context, artifact *transport.Artifact) core.Result {
+				return core.Result{Error: "fail", ExitCode: 1}
 			}
 		}
 		defer func() { runAgent = origRunAgent }()

@@ -13,6 +13,8 @@ import (
 	"mework/client/subscribe"
 	"mework/sandbox/agent"
 	"mework/sandbox/engine/local"
+	"mework/sandbox/runtime"
+	"mework/shared/core"
 	"mework/shared/grant"
 	"mework/shared/transport"
 )
@@ -61,9 +63,9 @@ func processDispatch(ctx context.Context, d transport.Dispatch, eventID string, 
 	// 5. Report terminal result.
 	status := "done"
 	var lastError string
-	if result.Err != nil {
+	if result.Error != "" {
 		status = "failed"
-		lastError = result.Err.Error()
+		lastError = result.Error
 	}
 	if err := reportResult(ctx, opts.hubURL, opts.secret, d.Session, status, result.Output, lastError); err != nil {
 		log.Printf("report result failed: %v (dispatch session=%s)", err, d.Session)
@@ -105,23 +107,56 @@ func pullAgent(ctx context.Context, catalogURL string, ref transport.AgentRef, g
 	return &artifact, nil
 }
 
-// runAgent runs the agent artifact through the local sandbox. It is a package-
-// level variable so tests can replace it with a mock. Production code uses
-// defaultRunAgent — callers fetch the prompt from artifact.Content and feed it
-// to the detected AI CLI over stdin (never argv), matching the injection-safety
-// invariant.
+// runAgent runs the agent artifact through the sandbox runtime. It is a
+// package-level variable so tests can replace it with a mock. Production code
+// uses defaultRunAgent — the prompt is fed to the AI CLI over stdin (never
+// argv), matching the injection-safety invariant.
 var runAgent = defaultRunAgent
 
-// defaultRunAgent runs the agent artifact through the local sandbox. It
+// defaultRunAgent runs the agent artifact through the local sandbox driver. It
 // detects the first available AI CLI backend and feeds the artifact content
 // as the prompt over stdin (never argv).
-func defaultRunAgent(ctx context.Context, artifact *transport.Artifact) local.RunResult {
+func defaultRunAgent(ctx context.Context, artifact *transport.Artifact) core.Result {
 	backend, ok := agent.Detect(nil)
 	if !ok {
-		return local.RunResult{Err: fmt.Errorf("no AI backend detected; install one of %v", agent.DefaultBackends)}
+		return core.Result{Error: fmt.Sprintf("no AI backend detected; install one of %v", agent.DefaultBackends)}
 	}
-	prompt := string(artifact.Content)
-	return local.Run(ctx, backend, prompt, "", 30*time.Minute)
+
+	// Use the local sandbox driver for the default path.
+	drv := local.New()
+	mgr := runtime.NewManager(drv)
+
+	spec := core.RunSpec{
+		AgentID:     artifact.Ref.Name,
+		BackendPath: backend.Path,
+		BackendName: backend.Name,
+		Task:        string(artifact.Content),
+		Timeout:     30 * time.Minute,
+	}
+
+	runCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer cancel()
+
+	s, err := mgr.Start(runCtx, spec)
+	if err != nil {
+		return core.Result{Error: fmt.Sprintf("start sandbox: %v", err)}
+	}
+	defer func() { _ = mgr.Destroy(context.Background(), s.ID()) }()
+
+	var stdout, stderr bytes.Buffer
+	exitCode, execErr := s.Exec(runCtx, []string{backend.Path}, bytes.NewReader(artifact.Content), &stdout, &stderr)
+
+	res := core.Result{
+		Output:   stdout.String() + stderr.String(),
+		ExitCode: exitCode,
+	}
+	if execErr != nil {
+		if exitCode <= 0 {
+			res.ExitCode = -1
+		}
+		res.Error = execErr.Error()
+	}
+	return res
 }
 
 // reportResult posts a terminal result for a session to the hub.

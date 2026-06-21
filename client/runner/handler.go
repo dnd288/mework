@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"mework/client/subscribe"
-	"mework/sandbox/engine/local"
+	"mework/shared/core"
 )
 
 func buildPrompt(job *subscribe.Job) string {
@@ -28,10 +28,10 @@ func buildPrompt(job *subscribe.Job) string {
 	return sb.String()
 }
 
-func formatResult(backend string, res local.RunResult) string {
-	if res.Err != nil {
-		return fmt.Sprintf("⚠️ Agent (%s) failed (exit %d): %v\n\n```\n%s\n```",
-			backend, res.ExitCode, res.Err, truncate(res.Output, 4000))
+func formatResult(backend string, res core.Result) string {
+	if res.Error != "" {
+		return fmt.Sprintf("⚠️ Agent (%s) failed (exit %d): %s\n\n```\n%s\n```",
+			backend, res.ExitCode, res.Error, truncate(res.Output, 4000))
 	}
 	return fmt.Sprintf("✅ Agent (%s) finished:\n\n```\n%s\n```", backend, truncate(res.Output, 8000))
 }

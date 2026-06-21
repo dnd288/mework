@@ -35,6 +35,8 @@ type SandboxDriver interface {
 
 // Sandbox is a running sandbox environment that can execute commands.
 type Sandbox interface {
+	// ID returns the sandbox identifier, set at Start time by the driver.
+	ID() string
 	// Exec runs a command inside the sandbox and connects stdio.
 	Exec(ctx context.Context, command []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
 	// Mount syncs a workspace into the sandbox.

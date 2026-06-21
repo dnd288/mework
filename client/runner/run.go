@@ -1,17 +1,21 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
 	"mework/client/subscribe"
 	"mework/sandbox/agent"
 	"mework/sandbox/engine/local"
+	"mework/sandbox/runtime"
 	"mework/server/bus"
 	"mework/shared/config"
+	"mework/shared/core"
 )
 
 // Run is the daemon's main loop: subscribe to the SSE message bus for the
@@ -31,6 +35,11 @@ func Run(ctx context.Context, profile string, cfg *config.Config) error {
 	} else {
 		log.Printf("using AI backend %s (%s)", backend.Name, backend.Path)
 	}
+
+	// Select sandbox driver from config (default "local").
+	mgr := runtime.NewManagerFor(cfg.Daemon.SandboxEngine)
+	caps := mgr.Caps()
+	log.Printf("using sandbox driver %q (isolated=%v)", caps.DriverName, caps.IsIsolated)
 
 	client := subscribe.NewClient(cfg.ServerURL, 10*time.Second)
 
@@ -111,8 +120,37 @@ func Run(ctx context.Context, profile string, cfg *config.Config) error {
 			prompt := buildPrompt(&job)
 			workDir := local.WorkDir(config.ProfileDir(profile), job.ID)
 
-			// Execute AI agent
-			res := local.Run(ctx, backend, prompt, workDir, 30*time.Minute)
+			// Execute AI agent through the sandbox driver
+			runCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+			spec := core.RunSpec{
+				AgentID:     backend.Name,
+				BackendPath: backend.Path,
+				BackendName: backend.Name,
+				SandboxID:   workDir,
+				Timeout:     30 * time.Minute,
+			}
+			s, startErr := mgr.Start(runCtx, spec)
+
+			var res core.Result
+			if startErr != nil {
+				cancel()
+				res = core.Result{Error: fmt.Sprintf("start sandbox: %v", startErr)}
+			} else {
+				var stdout, stderr bytes.Buffer
+				exitCode, execErr := s.Exec(runCtx, []string{backend.Path}, bytes.NewReader([]byte(prompt)), &stdout, &stderr)
+				res = core.Result{
+					Output:   stdout.String() + stderr.String(),
+					ExitCode: exitCode,
+				}
+				if execErr != nil {
+					res.Error = execErr.Error()
+					if exitCode <= 0 {
+						res.ExitCode = -1
+					}
+				}
+				_ = mgr.Destroy(context.Background(), s.ID())
+			}
+			cancel()
 
 			// Stop heartbeat
 			stopHeartbeat()
@@ -120,9 +158,9 @@ func Run(ctx context.Context, profile string, cfg *config.Config) error {
 			// Terminal transition
 			status := "done"
 			var lastError string
-			if res.Err != nil {
+			if res.Error != "" {
 				status = "failed"
-				lastError = res.Err.Error()
+				lastError = res.Error
 			}
 			summary := formatResult(backend.Name, res)
 
