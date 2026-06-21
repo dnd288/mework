@@ -76,20 +76,23 @@ func (s *Service) RegisterTenant(ctx context.Context, name string) (*Tenant, err
 	return &ten, nil
 }
 
-// RegistrationToken is a stored enrollment token bound to an owning tenant. Only the
-// HMAC lookup of the raw token is persisted; a runner enrolled with the token inherits
-// TenantID, so cross-tenant enrollment is denied by construction.
-type RegistrationToken struct {
-	ID       string `json:"id"`
-	TenantID string `json:"tenant_id"`
-}
-
 // IssueRegistrationToken mints a registration token bound to the given tenant and
 // returns its plaintext value. Only the token's HMAC lookup is stored, recording the
 // owning TenantID; the plaintext is shown once to the caller and never persisted.
-func (s *Service) IssueRegistrationToken(ctx context.Context, tenant Tenant) (string, error) {
+// Optional parameters via IssueTokenOption set the token's account_id and TTL.
+func (s *Service) IssueRegistrationToken(ctx context.Context, tenant Tenant, opts ...IssueTokenOption) (string, error) {
 	if tenant.ID == "" {
 		return "", errors.New("tenant is required")
+	}
+
+	o := defaultIssueTokenOptions()
+	for _, fn := range opts {
+		fn(&o)
+	}
+
+	var accountIDParam any
+	if o.accountID != "" {
+		accountIDParam = o.accountID
 	}
 
 	rawToken, err := token.GenerateRandomToken()
@@ -99,9 +102,9 @@ func (s *Service) IssueRegistrationToken(ctx context.Context, tenant Tenant) (st
 
 	lookup := token.ComputeLookup(rawToken, s.serverKey)
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO registration_tokens (tenant_id, token_lookup)
-		VALUES ($1, $2)
-	`, tenant.ID, lookup)
+		INSERT INTO registration_tokens (tenant_id, account_id, token_lookup, expires_at)
+		VALUES ($1, $2, $3, NOW() + $4::interval)
+	`, tenant.ID, accountIDParam, lookup, fmt.Sprintf("%d seconds", int(o.ttl.Seconds())))
 	if err != nil {
 		return "", fmt.Errorf("failed to record registration token: %w", err)
 	}
@@ -110,14 +113,16 @@ func (s *Service) IssueRegistrationToken(ctx context.Context, tenant Tenant) (st
 }
 
 // LookupRegistrationToken resolves a plaintext registration token to its stored record,
-// exposing the owning TenantID. An unknown token yields ErrInvalidRegistrationToken.
+// exposing the owning TenantID and AccountID. An unknown, expired, or already-consumed
+// token yields ErrInvalidRegistrationToken.
 func (s *Service) LookupRegistrationToken(ctx context.Context, rawToken string) (*RegistrationToken, error) {
 	lookup := token.ComputeLookup(rawToken, s.serverKey)
 	var rec RegistrationToken
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, tenant_id FROM registration_tokens
-		WHERE token_lookup = $1
-	`, lookup).Scan(&rec.ID, &rec.TenantID)
+		SELECT id, tenant_id, COALESCE(account_id::text, ''), expires_at, consumed_at
+		FROM registration_tokens
+		WHERE token_lookup = $1 AND consumed_at IS NULL AND expires_at > NOW()
+	`, lookup).Scan(&rec.ID, &rec.TenantID, &rec.AccountID, &rec.ExpiresAt, &rec.ConsumedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvalidRegistrationToken

@@ -1,8 +1,8 @@
 ## 1. Enrollment
 
-- [ ] 1.1 Hub: issue short-lived, single-use registration tokens; exchange endpoint that returns a durable runner credential
-- [ ] 1.2 Client: `mework runner enroll --url --token` — exchange and persist identity at `~/.mework/` (0600)
-- [ ] 1.3 Reject invalid/expired registration tokens; never persist identity on failure
+- [x] 1.1 Hub: issue short-lived, single-use registration tokens; exchange endpoint that returns a durable runner credential
+- [x] 1.2 Client: `mework runner enroll --url --token` — exchange and persist identity at `~/.mework/` (0600)
+- [x] 1.3 Reject invalid/expired registration tokens; never persist identity on failure
 
 ## 2. Subscription & presence
 
