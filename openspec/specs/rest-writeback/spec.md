@@ -42,3 +42,12 @@ write-back, and the sweeper retries pending write-backs.
 
 - **WHEN** the server restarts after a write-back has already been delivered
 - **THEN** the result is not posted to the provider a second time
+
+### Requirement: Write-back via channel session context
+
+When a sandbox completes processing on a channel, the write-back SHALL use the channel session context (provider code, account ID, resource ID) to look up the provider connection, decrypt the token server-side, and post the result. The runner SHALL NOT hold the provider token.
+
+#### Scenario: Write-back from channel session
+
+- **WHEN** a sandbox finishes processing channel `"mello:TICKET-99"` and produces a result
+- **THEN** the server looks up the channel session, resolves the provider connection using the session's account ID and provider code, decrypts the token, and calls the Mello adapter's `WriteBack`

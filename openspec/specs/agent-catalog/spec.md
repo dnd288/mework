@@ -33,10 +33,7 @@ explicit version or by a moving pointer (e.g. `latest`).
 
 ### Requirement: Type-agnostic artifact form
 
-The catalog SHALL support at least two artifact forms — a **definition/manifest**
-(prompt, workflow, declared needs) and a **packaged/container image reference** —
-and MUST record which form each version uses so a consumer can decide how to
-materialize it.
+The catalog SHALL support three artifact forms — a **definition/manifest** (prompt, workflow, declared needs), a **packaged/container image reference**, and a **bundle** (self-contained zip with folder structure) — and MUST record which form each version uses so a consumer can decide how to materialize it.
 
 #### Scenario: Pull a definition-form agent
 
@@ -47,6 +44,11 @@ materialize it.
 
 - **WHEN** a runner pulls an agent whose form is `image`
 - **THEN** the hub returns the image reference and the form indicator so the sandbox driver can pull/run the image
+
+#### Scenario: Pull a bundle-form agent
+
+- **WHEN** a runner pulls an agent whose form is `bundle`
+- **THEN** the hub returns the zip bytes and the form indicator so the runner extracts and materializes the folder structure
 
 ### Requirement: Pull an agent
 
@@ -103,3 +105,38 @@ enforced downstream.
 
 - **WHEN** the same runner is dispatched twice — once with a broad grant and once with a minimal grant
 - **THEN** each run is bound to its own grant and the minimal run is restricted regardless of the broad run's privileges
+
+### Requirement: Bundle-form sandbox artifact
+
+The catalog SHALL support a third artifact form — `"bundle"` — in addition to the existing `"definition"` and `"image"` forms. A bundle SHALL be a zip file containing a standardized folder structure:
+- `sandbox.yaml` (metadata: name, version, spec, backend, author)
+- `definition.md` (agent prompt / system message)
+- `tools/` (MCP tools and plugins)
+- `hooks/` (lifecycle scripts)
+- `assets/` (reference data)
+- `config/` (default config overrides)
+
+The zip SHALL be stored as `payload BYTEA`, exactly like the `"definition"` form stores its text payload — no schema change is needed.
+
+#### Scenario: Publish a bundle-form sandbox
+
+- **WHEN** a developer zips a local sandbox folder and publishes it with `form: "bundle"`
+- **THEN** the catalog stores the zip as an immutable agent version
+
+### Requirement: Catalog as sandbox registry
+
+The agent catalog SHALL serve as the sandbox registry. Any machine SHALL be able to publish a sandbox definition (definition, image, or bundle form) and any authorized worker SHALL be able to pull and materialize it.
+
+#### Scenario: Push and pull a bundle
+
+- **WHEN** a developer publishes a bundle and another worker pulls it
+- **THEN** the worker extracts the zip to an isolated workdir, reads `sandbox.yaml` and `definition.md`, and runs the sandbox
+
+### Requirement: Dispatch with channel context
+
+The `Dispatch` endpoint SHALL be extended to accept an optional `channel_key` parameter. When provided, the dispatch SHALL include the channel context (provider code, resource ID, spec) so the worker knows which channel to subscribe to.
+
+#### Scenario: Dispatch with channel binding
+
+- **WHEN** the auto-provisioner dispatches an agent with `channel_key: "mello:TICKET-99"` to a worker
+- **THEN** the worker subscribes to `channel.mello.TICKET-99.*` after pulling and materializing the agent

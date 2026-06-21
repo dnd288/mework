@@ -55,3 +55,21 @@ provider-specific columns, identifying external entities by
 
 - **WHEN** a new provider adapter is registered
 - **THEN** existing tables (`jobs`, `provider_connections`, `account_identities`) accommodate it without a schema migration
+
+### Requirement: Adapter exposes channel key method
+
+The provider adapter interface SHALL be extended with a method `ChannelKey(event payload) -> (providerCode, resourceID)` that extracts the normalized channel tuple from a raw event, enabling the channel router to compute the channel key without provider-specific knowledge.
+
+#### Scenario: Mello adapter returns channel key
+
+- **WHEN** the Mello adapter's `ChannelKey` is called with a webhook payload containing `ticket_id = "TICKET-99"`
+- **THEN** it returns `("mello", "TICKET-99")`
+
+### Requirement: Provider connection resolved from channel session
+
+The provider connection lookup SHALL be extended to support resolution from a channel session context (account ID + provider code), enabling the write-back flow to find the correct credentials from the channel binding without the caller needing to know the account ID explicitly.
+
+#### Scenario: Write-back resolves connection from session
+
+- **WHEN** a write-back is triggered for channel `"mello:TICKET-99"` with a bound session containing `account_id = "acct_1"`
+- **THEN** the system looks up the provider connection using `(account_id="acct_1", provider_code="mello")` and unseals the credential
