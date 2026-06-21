@@ -17,6 +17,7 @@ import (
 	"mework/server/provider"
 	melloprovider "mework/server/provider/mello"
 	"mework/server/registry"
+	sessionsvc "mework/server/session"
 	"mework/server/webhook"
 	"mework/shared/grant"
 )
@@ -55,6 +56,9 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	agentHandlers := catalog.NewAgentHandlersWithSelector(profileSvc, msgBroker, orchestrator.NewRunnerSelector())
 	sseHandler := bus.NewSSEHandler(msgBroker)
 	msgAckHandler := bus.NewAckHandler(msgBroker)
+
+	sessionManager := sessionsvc.NewManager(msgBroker, sessionsvc.DefaultConfig())
+	sessionHandlers := sessionsvc.NewHandlers(sessionManager)
 
 	webhookHandler := webhook.NewHandler(pool, msgBroker, cfg.MeworkSecretKey, cfg.MelloBaseURL)
 
@@ -96,6 +100,12 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 		r.Get("/agents", agentHandlers.ListAgents)
 		r.Get("/agents/{name}", agentHandlers.ResolveAgent)
 		r.Post("/agents/{name}/dispatch", agentHandlers.Dispatch)
+
+		r.Post("/sessions", sessionHandlers.CreateSession)
+		r.Get("/sessions", sessionHandlers.ListSessions)
+		r.Get("/sessions/{id}", sessionHandlers.GetSession)
+		r.Post("/sessions/{id}/attach", sessionHandlers.AttachSession)
+		r.Delete("/sessions/{id}", sessionHandlers.CloseSession)
 
 		r.Post("/runners/registration-tokens", registryHandlers.IssueRegistrationToken)
 	})

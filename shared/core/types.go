@@ -2,13 +2,7 @@
 // components. These are stub definitions that downstream changes will fill in.
 package core
 
-import (
-	"fmt"
-	"time"
-)
-
-// ObjectDeleted is a sentinel error returned when an object is not found.
-var ObjectDeleted = fmt.Errorf("object not found")
+import "time"
 
 // Agent represents an AI coding agent that can be run in a sandbox.
 type Agent struct {
@@ -80,10 +74,9 @@ type ObjectRef struct {
 
 // ObjectInfo is metadata about a stored object.
 type ObjectInfo struct {
-	Ref          ObjectRef
-	Size         int64
-	ETag         string
-	LastModified time.Time
+	Ref       ObjectRef
+	Size      int64
+	ETag      string
 }
 
 // Hook is a lifecycle hook (before/after run, before/after agent step).
@@ -99,4 +92,33 @@ type SandboxCaps struct {
 	SupportsGPU    bool
 	SupportsNet    bool
 	IsIsolated     bool
+}
+
+// SessionID uniquely identifies a session.
+type SessionID string
+
+// AccountID uniquely identifies a user account.
+type AccountID string
+
+// TenantID uniquely identifies a tenant.
+type TenantID string
+
+// SessionStatus represents the lifecycle state of a session.
+type SessionStatus string
+
+const (
+	SessionActive SessionStatus = "active"
+	SessionIdle   SessionStatus = "idle"
+	SessionClosed SessionStatus = "closed"
+)
+
+// SessionInfo is the management view of a live agent association.
+type SessionInfo struct {
+	ID      SessionID
+	Tenant  TenantID
+	Runner  string
+	Agent   Agent
+	Status  SessionStatus
+	Owner   AccountID
+	Created time.Time
 }

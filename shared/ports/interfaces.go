@@ -5,22 +5,8 @@ package ports
 
 import (
 	"context"
-	"errors"
 	"io"
-	"time"
-
 	"mework/shared/core"
-)
-
-// Sentinel errors for the RunnerSelector and SecretInjector ports.
-var (
-	// ErrNoEligibleRunner is returned by RunnerSelector.Select when no runner
-	// is eligible for the dispatch.
-	ErrNoEligibleRunner = errors.New("no eligible runner found for dispatch")
-
-	// ErrSecretRefused is returned by SecretInjector.Inject when a secret's
-	// source is not within the dispatch's grant scope.
-	ErrSecretRefused = errors.New("secret source not in grant scope")
 )
 
 // SandboxDriver manages the lifecycle of sandbox environments.
@@ -37,8 +23,6 @@ type SandboxDriver interface {
 
 // Sandbox is a running sandbox environment that can execute commands.
 type Sandbox interface {
-	// ID returns the sandbox identifier, set at Start time by the driver.
-	ID() string
 	// Exec runs a command inside the sandbox and connects stdio.
 	Exec(ctx context.Context, command []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
 	// Mount syncs a workspace into the sandbox.
@@ -47,38 +31,12 @@ type Sandbox interface {
 	Signals(ctx context.Context, sig string) error
 }
 
-// ObjectPresignURL represents a presigned URL with its expiry time.
-type ObjectPresignURL struct {
-	URL       string
-	ExpiresAt time.Time
-}
-
-// ObjectStore is a generic S3-compatible blob store interface.
+// ObjectStore is a generic key-value blob store interface.
 type ObjectStore interface {
-	// PutObject stores an object identified by bucket and key.
-	PutObject(ctx context.Context, ref core.ObjectRef, reader io.Reader) error
-
-	// GetObject retrieves an object's contents.
-	GetObject(ctx context.Context, ref core.ObjectRef) (io.ReadCloser, error)
-
-	// HeadObject returns metadata for an object (size, ETag, last-modified).
-	// Returns core.ObjectDeleted when the object does not exist.
-	HeadObject(ctx context.Context, ref core.ObjectRef) (core.ObjectInfo, error)
-
-	// ListObjects returns objects whose key begins with the given prefix.
-	ListObjects(ctx context.Context, prefix string) ([]core.ObjectInfo, error)
-
-	// DeleteObject removes an object. Removing a non-existent object is not an error.
-	DeleteObject(ctx context.Context, ref core.ObjectRef) error
-
-	// PresignGetURL mints a presigned GET URL valid for the given TTL.
-	PresignGetURL(ctx context.Context, ref core.ObjectRef, ttl time.Duration) (ObjectPresignURL, error)
-
-	// PresignPutURL mints a presigned PUT URL valid for the given TTL.
-	PresignPutURL(ctx context.Context, ref core.ObjectRef, ttl time.Duration) (ObjectPresignURL, error)
-
-	// PutMultipart uploads a large object as ordered parts and returns the final ETag.
-	PutMultipart(ctx context.Context, ref core.ObjectRef, parts []io.Reader) (string, error)
+	Put(ctx context.Context, ref core.ObjectRef, reader io.Reader) error
+	Get(ctx context.Context, ref core.ObjectRef) (io.ReadCloser, error)
+	Delete(ctx context.Context, ref core.ObjectRef) error
+	List(ctx context.Context, prefix string) ([]core.ObjectInfo, error)
 }
 
 // AgentBackend detects and runs AI coding agents (CLI tools).
@@ -109,37 +67,36 @@ type Notifier interface {
 	Notify(ctx context.Context, channel string, title, body string) error
 }
 
-// SelectionCriteria defines what to select a runner for.
-type SelectionCriteria struct {
-	// AgentRef is the agent that the dispatch will run.
-	AgentRef string
-	// SessionID, if set, requests session-affinity routing.
-	SessionID string
+// Event is a single event delivered on a session control channel.
+type Event struct {
+	ID      string
+	Payload []byte
 }
 
-// RunnerSelector selects a target runner for a dispatch, load-balancing
-// across eligible online runners and honouring session affinity.
-type RunnerSelector interface {
-	// Select returns the ID of the best eligible runner for the given
-	// tenant and selection criteria. Returns ErrNoEligibleRunner when
-	// no runner is eligible.
-	Select(ctx context.Context, tenant string, criteria SelectionCriteria) (string, error)
+// Session is the live wire endpoint of a session — a control channel plus
+// the ability to push messages to the sandbox. It is the value Attach returns.
+type Session interface {
+	// ID returns the session's unique identifier.
+	ID() core.SessionID
+	// Events returns a channel that delivers control events for this session.
+	Events() <-chan Event
+	// Push sends a message payload to the sandbox.
+	Push(ctx context.Context, payload []byte) error
+	// Close terminates the live endpoint.
+	Close() error
 }
 
-// SecretRef identifies a single secret to inject into a sandbox.
-type SecretRef struct {
-	// Name is the logical name of the secret (e.g. "API_KEY").
-	Name string
-	// Source is the grant source that scopes this secret (e.g. "github" or "openai").
-	Source string
-}
-
-// SecretInjector delivers grant-scoped secrets into a provisioned sandbox
-// out-of-band (env / file), never via argv or logs.
-type SecretInjector interface {
-	// Inject materialises each secret as a per-sandbox file with 0400
-	// permissions and exposes it via an env var whose name is grant-scoped.
-	// Each secret's Source must be in the provided sources list; otherwise
-	// ErrSecretRefused is returned and the sandbox is aborted.
-	Inject(ctx context.Context, sandboxID string, sources []string, secrets []SecretRef) error
+// SessionManager owns the session lifecycle (separate from the bus Session
+// primitive, which is the live wire endpoint Attach returns).
+type SessionManager interface {
+	// Create creates a new tracked session from the given agent/runner params.
+	Create(ctx context.Context, agentName, agentVersion, runnerID string, owner core.AccountID, tenant core.TenantID) (core.SessionInfo, error)
+	// Get returns the current SessionInfo for a session.
+	Get(ctx context.Context, id core.SessionID) (core.SessionInfo, error)
+	// List returns all sessions scoped to a tenant.
+	List(ctx context.Context, tenant core.TenantID) ([]core.SessionInfo, error)
+	// Attach returns the live wire endpoint for an existing session.
+	Attach(ctx context.Context, id core.SessionID) (Session, error)
+	// Close terminates a session and destroys its sandbox.
+	Close(ctx context.Context, id core.SessionID) error
 }
