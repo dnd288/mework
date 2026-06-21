@@ -6,9 +6,8 @@ session management — without first installing the agent CLI, choosing an engin
 hand-wiring a session. The pieces exist as scaffolding but are not a working whole.
 The sandbox driver abstraction (`local`/`docker`/`cloudflare`/`custom`), agent
 detection, and a sandbox bundle format are built; sessions, chat (`Conversation`),
-and run-events are specified and scaffolded — the server holds only the session
-**metadata** and the **bus** topics, while execution lives on the runner. But the
-runner still executes **one-shot** (prompt-in → result-out): there is no notion of a named,
+and run-events are specified and scaffolded server-side. But the runner still
+executes **one-shot** (prompt-in → result-out): there is no notion of a named,
 ready-to-run agent+sandbox combo, and nothing drives a **long-lived agent
 interactively** with streamed logs.
 
@@ -18,14 +17,6 @@ makes the **daemon drive a long-lived sandbox over chat** with live observabilit
 
 ## What Changes
 
-- **Deployment boundary (unchanged, made explicit): the daemon and the sandbox run on
-  the runner, never on the server.** `mework-server` is a **gateway + registry** only —
-  webhook ingress, the agent/definition **catalog (registry)**, session **metadata**,
-  and the **bus** control/stream topics. The agent process and its sandbox are spawned
-  by the **daemon on the runner machine** (`libs/client/runner` + `libs/sandbox`), so
-  source code and provider credentials stay local. Prebuilt definitions are *published
-  to* the server registry but *resolved, materialized, and executed* on the runner. The
-  server never spawns a sandbox.
 - A new **prebuilt-agent-sandbox** capability. The conceptual model is `daemon →
   sandbox`, and a **sandbox *has* an engine** — the sandbox is the agent runner; the
   engine (`local` first; `docker` is one of many; `cloudflare`/`custom` already exist)
@@ -72,14 +63,10 @@ makes the **daemon drive a long-lived sandbox over chat** with live observabilit
 - **Definition format**: extends the sandbox bundle metadata (`libs/sandbox/schema.go`)
   and bundle tooling (`libs/sandbox/cmd/mework-sandbox`); engine selection reuses
   `libs/sandbox/runtime/manager.go` (`NewManagerFor`).
-- **Execution path (runner-side)**: promotes the defined-but-unimplemented
-  `ports.AgentBackend` (`libs/shared/ports/interfaces.go`) or folds it onto
-  `SandboxDriver.Exec` for the long-lived path; the sandbox is spawned by
-  `libs/client/runner` via `libs/sandbox` on the runner. `libs/server` holds only
-  session metadata, the bus, and the catalog/registry — it imports no sandbox
-  engine/runtime and never starts a sandbox. The server-side `libs/server/session`
-  contract (Session/Conversation) is *consumed by* the runner, not where execution
-  happens.
+- **Execution path**: promotes the defined-but-unimplemented `ports.AgentBackend`
+  (`libs/shared/ports/interfaces.go`) or folds it onto `SandboxDriver.Exec` for the
+  long-lived path; bridges `libs/server/session` into `libs/client/runner` (replaces the
+  one-shot `Exec(stdin=prompt)` with a long-lived process fed per turn).
 - **Backends**: extends `libs/sandbox/agent/detect.go` `DefaultBackends`
   (`windows-claude`, `v0`). Domain types `core.RunSpec` / `core.SandboxCaps`
   (`libs/shared/core/types.go`) gain definition-reference and session fields as needed.

@@ -7,29 +7,9 @@ immutable artifact binding an engine, an agent backend, an image/config, and res
 limits into a ready-to-run combo — and the execution model for running such a
 definition either one-shot by reference or as a long-lived interactive multi-turn
 session over a pluggable engine, with live observability and tenant-scoped,
-grant-enforced remote control. The daemon and the sandbox run on the **runner**; the
-server is a **gateway + registry** only.
+grant-enforced remote control.
 
 ## Requirements
-
-### Requirement: Runner-side execution; server is gateway and registry
-
-The daemon and the sandbox SHALL run on the **runner** (the local agent machine), never
-on the server. `mework-server` SHALL act only as a **gateway and registry**: webhook
-ingress, the agent/definition **catalog (registry)**, session **metadata**, and the
-**message-bus** control/stream topics. The server MUST NOT spawn a sandbox or execute
-an agent process; the runner resolves a definition and spawns/executes the sandbox
-locally, so source code and provider credentials stay on the runner.
-
-#### Scenario: Server stores the definition, runner executes it
-
-- **WHEN** a prebuilt definition is published to the server and then run
-- **THEN** the server stores it in the catalog/registry, and the runner resolves it and spawns the sandbox locally to execute the agent
-
-#### Scenario: Server never spawns a sandbox
-
-- **WHEN** a session is created and driven
-- **THEN** the server holds only the session metadata and the bus topics, while the long-lived sandbox and agent process exist only on the runner
 
 ### Requirement: Prebuilt sandbox definition
 
@@ -176,21 +156,15 @@ field.
 
 ### Requirement: Remote-control authorization
 
-All session operations (create, attach, send turn, cancel, close, list) SHALL be
-authorized: **tenant-isolated**, bound to the session **owner**, and **grant-enforced**
-per the `auth-and-secrets` permission model. A caller lacking the required grant or
-crossing a tenant boundary MUST be denied. For listing, the tenant scope MUST be
-derived from the authenticated caller, never from a caller-supplied argument.
+All session operations (create, attach, send turn, cancel, close) SHALL be authorized:
+**tenant-isolated**, bound to the session **owner**, and **grant-enforced** per the
+`auth-and-secrets` permission model. A caller lacking the required grant or crossing a
+tenant boundary MUST be denied.
 
 #### Scenario: Cross-tenant access denied
 
 - **WHEN** a caller in tenant `A` attempts to operate on a session in tenant `B`
 - **THEN** the system denies the operation
-
-#### Scenario: List is scoped to the caller's own tenant
-
-- **WHEN** a caller lists sessions
-- **THEN** the system returns only the authenticated caller's tenant's sessions, regardless of any tenant argument the caller supplies
 
 #### Scenario: Operation without grant denied
 
