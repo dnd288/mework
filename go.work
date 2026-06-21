@@ -2,10 +2,10 @@ go 1.26
 
 use (
 	.
-	./client
-	./sandbox
-	./server
-	./shared
-	./tests
-	./tools
+	./libs/server
+	./libs/shared
+	./libs/client
+	./libs/sandbox
+	./libs/tests
+	./libs/tools
 )
