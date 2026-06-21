@@ -8,9 +8,11 @@ tags: [workflow, automation, batch, ship, local, experimental]
 Ship **every ACTIVE OpenSpec change** through the local pipeline in one go,
 **fully automatically — no confirmation, no per-change prompts**. The orchestrator
 auto-decides per change whether to apply+ship, spec+ship, ship-only, repair+ship,
-or archive-only. Each change keeps the full workflow — branch, per-task commits,
-verify, review — and merges into `main` **locally instead of opening a PR**. Halts
-on first failure with full progress. No `gh`, no remote push (unless `--push-main`).
+or archive-only. Each change keeps the full workflow — branch → a **few test-first
+units** (Red→Green→one commit per unit, not one per task) → verify → review — then
+**merges into `main` locally** (so the next dependency-ordered change builds on it)
+**and opens a PR** for the record/human review. Result: the project on `main` + one
+PR per change. Halts on first failure with full progress.
 
 **Input**: Optional `--from <cNNNN>` (start from this ordinal), `--only <list>`
 (comma-separated whitelist), `--dry-run` (plan-only), `--skip-apply` (treat all
@@ -38,13 +40,13 @@ skipApply=false. Per-change evidence is always written.
    default to the real run.
 
 2. **Surface progress.** As each change ships, show the result: change name,
-   mode, evidence dir, mergeSha, archivePath, tag. On halt, show the failing
-   change + reason + last commit + suggested fix.
+   mode, evidence dir, mergeSha, archivePath, tag, **PR url**. On halt, show the
+   failing change + reason + last commit + suggested fix.
 
 3. **Relay the final report.** Per-change summary table (change | mode |
-   commits | mergeSha | archivePath | tag) + total stats + resume instructions.
-   Always includes the `resumeFrom` change so a halted run can be picked up
-   with `--from`.
+   commits | mergeSha | archivePath | tag | **prUrl**) + total stats + resume
+   instructions. Always includes the `resumeFrom` change so a halted run can be
+   picked up with `--from`.
 
 **Guardrails**
 - **Fully automatic** — never asks the user, per change or overall.

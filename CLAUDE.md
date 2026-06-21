@@ -161,13 +161,16 @@ code.**
 - `/opsx:ship-all` — auto-discover every ACTIVE OpenSpec change and ship the
   full project — branch → ship → archive — locally and **fully automatically (no
   confirmation, no per-change prompts)**, with halt-on-failure and idempotent
-  resume. Each change keeps the full workflow (branch, per-task commits, verify,
-  review) and merges into `main` **locally instead of opening a PR**. Per change,
+  resume. Each change keeps the full workflow (branch → a **few test-first units**
+  → verify → review) and then **merges into `main` locally** (so the next
+  dependency-ordered change builds on it) **and opens a PR** for the record/human
+  review — result: the project on `main` plus one PR per change. Per change,
   decides mode from `openspec status` (apply+ship / spec+ship / ship-only /
   repair+ship / archive-only / skip). The orchestrator owns branch creation
   (`feat/<change>` from a clean `main`) and invokes the nested `ship-plan` /
-  `ship-code` workflows via the `workflow()` helper; `ship-code` implements every
-  open task **test-first** (Red→Green→one commit per pair) — there is no standalone
+  `ship-code` workflows via the `workflow()` helper; `ship-plan` groups the change
+  into **a few units** (not one per tasks.md line) and `ship-code` implements each
+  unit **test-first** (Red→Green→one commit per unit) — there is no standalone
   `/opsx:apply`. Sorted by cNNNN dependency order. Writes
   `openspec/changes/.ship-all-progress.json` as durable state. Honors
   `--from <cNNNN>`, `--only <list>`, `--dry-run` (opt-in plan-only), `--skip-spec`,

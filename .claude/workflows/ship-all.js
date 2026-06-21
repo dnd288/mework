@@ -67,6 +67,7 @@ const QUEUE_ENTRY = {
     mergeSha: { type: ['string', 'null'] },
     archivePath: { type: ['string', 'null'] },
     tag: { type: ['string', 'null'] },
+    prUrl: { type: ['string', 'null'] },
     commits: { type: 'integer' },
     durationMs: { type: 'integer' },
     failureStage: { type: 'string' },
@@ -263,6 +264,7 @@ async function runOne(entry) {
     dryRun: false,
     local: true,
     base: 'main',
+    openPr: true, // each change: review → local merge (deps flow) → push branch + open a PR
     mergeStrategy, bump, noPushMain, archive,
     reserveTokens: reserve, maxRepairs, force,
   }
@@ -342,8 +344,9 @@ async function runOne(entry) {
   entry.mergeSha = code2.mergeSha || null
   entry.archivePath = code2.archivePath || null
   entry.tag = code2.tag || null
+  entry.prUrl = code2.prUrl || null
   entry.commits = Array.isArray(code2.commits) ? code2.commits.length : (code2.commits || 0)
-  log(`${entry.change}: shipped (merge=${entry.mergeSha} archive=${entry.archivePath} tag=${entry.tag} commits=${entry.commits})`)
+  log(`${entry.change}: shipped (merge=${entry.mergeSha} archive=${entry.archivePath} pr=${entry.prUrl || '(none)'} tag=${entry.tag} commits=${entry.commits})`)
   return { halt: false, entry }
 }
 
@@ -420,7 +423,7 @@ const summary = {
   pending: stillPending.length,
   shippedDetails: shipped.map((e) => ({
     change: e.change, mode: e.mode, commits: e.commits || 0,
-    mergeSha: e.mergeSha, archivePath: e.archivePath, tag: e.tag,
+    mergeSha: e.mergeSha, archivePath: e.archivePath, tag: e.tag, prUrl: e.prUrl || null,
   })),
   failedDetails: failed.map((e) => ({
     change: e.change, mode: e.mode, failureStage: e.failureStage, failureLog: e.failureLog,
@@ -451,5 +454,5 @@ return {
   progressPath: planRes.path,
   summary,
   notes: `All ${summary.shipped} change(s) shipped. ${summary.skipped} skipped.`,
-  nextStep: `Inspect ${planRes.path} for the full record. The local main branch is now ahead by ${shipped.reduce((s, e) => s + (e.commits || 0) + 2, 0)} commit(s). Push with: git push origin main (or re-run with --push-main on a per-change basis).`,
+  nextStep: `Inspect ${planRes.path} for the full record. main is now ahead by ${shipped.reduce((s, e) => s + (e.commits || 0) + 2, 0)} commit(s); ${shipped.filter((e) => e.prUrl).length} PR(s) opened for review (see shippedDetails[].prUrl). Push main with: git push origin main — pushing/merging the PRs then closes them.`,
 }

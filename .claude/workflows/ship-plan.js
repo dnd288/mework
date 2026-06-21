@@ -1,10 +1,10 @@
 export const meta = {
   name: 'ship-plan',
   description:
-    'Plan the execution of an APPROVED OpenSpec change as a reviewable handoff under .handoff/<change>/. For EACH task in the change\'s tasks.md it emits TWO handoff tasks — a test/Red task (the test plan: which *_test.go, the assertions drawn from the spec scenarios) and a code/Green task (the production change) — wired so the code task depends on its test and the pair shares one commit group. Writes plan.json (the index), tasks/NN-a-test.md + NN-b-code.md, and a README.md of shared context. Honors args.local — when true, the plan.json carries localOnly=true so ship-code picks up the fully-local path (no gh, no remote push). Writes NO production code and creates NO branch. Idempotent: re-planning preserves any tasks already marked done. The output handoff is meant to be reviewed (and optionally hand-edited) before /opsx:ship-code executes it.',
+    'Plan the execution of an APPROVED OpenSpec change as a reviewable handoff under .handoff/<change>/. Groups the change into a FEW test-first work-units (aim 1-4; collapse a small change to one) split along natural seams — package, capability, or spec requirement — NOT one unit per tasks.md line. Each unit is TDD: testDeliverables (the failing *_test.go to write first, asserting the delta-spec scenarios) then codeDeliverables (the production change), and covers one or more tasks.md items. Writes plan.json (the index of units), one tasks/<NN>-<slug>.md per unit (combined test+code plan), and a README.md of shared context. Honors args.local — when true, the plan.json carries localOnly=true so ship-code picks up the local merge path. Writes NO production code and creates NO branch. Idempotent: re-planning preserves any unit already marked done. The handoff is meant to be reviewed (and optionally hand-edited) before /opsx:ship-code executes it.',
   phases: [
     { title: 'Preflight', detail: 'openspec status + validate; read change artifacts' },
-    { title: 'Plan', detail: 'derive test+code pairs, write .handoff/<change>/' },
+    { title: 'Plan', detail: 'group change into a few TDD units, write .handoff/<change>/' },
   ],
 }
 
@@ -51,11 +51,11 @@ const PREFLIGHT = {
   },
 }
 const PLAN = {
-  type: 'object', additionalProperties: false, required: ['handoffDir', 'pairs', 'taskFiles', 'notes'],
+  type: 'object', additionalProperties: false, required: ['handoffDir', 'units', 'unitFiles', 'notes'],
   properties: {
     handoffDir: { type: 'string' },
-    pairs: { type: 'integer', description: 'number of change tasks planned (each = one test+code pair)' },
-    taskFiles: { type: 'array', items: { type: 'string' }, description: 'all tasks/NN-*.md files written' },
+    units: { type: 'integer', description: 'number of TDD work-units planned (a few per change, 1-4)' },
+    unitFiles: { type: 'array', items: { type: 'string' }, description: 'all tasks/<NN>-<slug>.md files written' },
     notes: { type: 'string' },
   },
 }
@@ -64,40 +64,39 @@ const PLAN = {
 const HANDOFF_FORMAT = [
   `HANDOFF FORMAT — write these files under "${handoffDir}/" (create dirs as needed):`,
   ``,
-  `1. ${handoffDir}/plan.json — the machine-readable index:`,
+  `1. ${handoffDir}/plan.json — the machine-readable index of UNITS:`,
   `   { "change": "${change}", "title": "<title>", "changeRoot": "<changeRoot>",`,
   `     "localOnly": ${local ? 'true' : 'false'},`,
-  `     "tasks": [ <one object per handoff task> ] }`,
-  `   Each task object (additionalProperties NOT allowed):`,
-  `   { "id": "01a", "pair": "01", "role": "test"|"code", "slug": "<kebab>", "title": "<imperative>",`,
-  `     "status": "todo", "depends_on": ["..."], "deliverable": "<repo-relative path>",`,
+  `     "units": [ <one object per work-unit> ] }`,
+  `   Each unit object (additionalProperties NOT allowed):`,
+  `   { "id": "01", "slug": "<kebab>", "title": "<imperative>", "status": "todo",`,
+  `     "coversTasks": ["1","2"],            // the tasks.md ordinals this unit realizes`,
+  `     "scenarios": ["<delta-spec scenario names this unit's tests assert>"],`,
+  `     "testDeliverables": ["<*_test.go path>", ...],     // failing tests to write FIRST (Red)`,
+  `     "codeDeliverables": ["<production .go path>", ...], // impl to make them pass (Green)`,
   `     "verify": "<one-line checkable acceptance>", "skipRed": false }`,
-  `   Rules: ids are "<pair><a|b>" (a=test, b=code). For EACH change task in tasks.md emit a`,
-  `   pair: an "a" test task (role:test, depends_on:[]) and a "b" code task (role:code,`,
-  `   depends_on:["<pair>a"]). The code task's deliverable is the production .go file; the test`,
-  `   task's deliverable is the *_test.go file. pair = the two-digit change-task ordinal.`,
+  `   GROUPING RULES (this is the whole point — keep it COARSE):`,
+  `   - Group the change's OPEN tasks into a FEW coherent units. Aim for 1-4 units total;`,
+  `     collapse a small change to ONE unit. Do NOT emit one unit per tasks.md line.`,
+  `   - Split only along natural seams: package, capability, or spec requirement (e.g.`,
+  `     "store+migrations", "registry+auth scoping", "e2e acceptance scenarios").`,
+  `   - Each unit is TEST-FIRST: its testDeliverables are written and must FAIL (Red)`,
+  `     before its codeDeliverables (Green). A unit may span several files.`,
+  `   - ids are two-digit ordinals "01","02",... in dependency order. Every open tasks.md`,
+  `     ordinal MUST appear in exactly one unit's coversTasks.`,
+  `   - A doc-only/pure-config unit with no testable behavior sets skipRed=true (with a`,
+  `     reason in its Goal) and may have empty testDeliverables — never skip silently.`,
   ``,
-  `2. ${handoffDir}/tasks/<id>-<a-test|b-code>.md per task (filename: "01-a-test.md", "01-b-code.md"):`,
-  `   --- (YAML frontmatter)`,
-  `   id: "01a"`,
-  `   pair: "01"`,
-  `   role: test`,
-  `   slug: <kebab>`,
-  `   title: <imperative one-line>`,
-  `   status: todo`,
-  `   depends_on: []`,
-  `   deliverable: <repo-relative path>`,
-  `   verify: <one-line checkable acceptance>`,
-  `   skipRed: false`,
-  `   ---`,
-  `   ## Goal`,
-  `   <1-3 sentences>`,
-  `   ## Context`,
-  `   Read ../README.md for shared context. <pointers to the proposal/design and the exact`,
-  `   delta-spec scenario(s) this task realizes.>`,
-  `   ## Acceptance criteria`,
-  `   - [ ] <concrete, checkable item — for a test task, the cases to assert (table rows);`,
-  `         for a code task, "the NNa test passes" + behavior + make vet/test green>`,
+  `2. ${handoffDir}/tasks/<id>-<slug>.md per unit (filename e.g. "01-tenant-core.md"):`,
+  `   --- (YAML frontmatter, keys: id, slug, title, status: todo, coversTasks,`,
+  `       testDeliverables, codeDeliverables, verify, skipRed) ---`,
+  `   ## Goal  <1-3 sentences — what this unit delivers>`,
+  `   ## Context  Read ../README.md. <pointers to proposal/design + the exact delta-spec`,
+  `   scenario(s) this unit realizes.>`,
+  `   ## Test plan (Red)  - [ ] <per testDeliverable: the table cases/assertions to write,`,
+  `   drawn from the scenarios — these must fail before the code exists>`,
+  `   ## Code plan (Green) - [ ] <per codeDeliverable: the minimal production change to turn`,
+  `   the Red tests green + make vet/test green>`,
   `   ## Output log`,
   `   <!-- appended by ship-code; leave empty -->`,
   ``,
@@ -105,12 +104,12 @@ const HANDOFF_FORMAT = [
   `   # ${change} — <title>`,
   `   ## Summary  (2-5 sentences from the proposal)`,
   `   ## Artifacts  (links: proposal, design, tasks.md, delta specs)`,
-  `   ## Task index  (table: pair | test deliverable | code deliverable | from change task)`,
+  `   ## Unit index  (table: id | covers tasks | test files | code files)`,
   `   ## Conventions  (stdin-not-argv, table-driven tests, make vet/test, -p 1, evidence dir)`,
   ``,
   `IDEMPOTENCY: if ${handoffDir}/plan.json already exists, read it first and PRESERVE the`,
-  `status of any task already marked "done" (do not regress it to "todo"); you may rewrite`,
-  `the rest. Keep plan.json tasks[*] and the tasks/*.md frontmatter in sync.`,
+  `status of any unit already marked "done" (do not regress it to "todo"); you may rewrite`,
+  `the rest. Keep plan.json units[*] and the tasks/*.md frontmatter in sync.`,
 ].join('\n')
 
 const SKILL = (name) => `the \`${name}\` skill (.claude/skills/${name}/SKILL.md)`
@@ -132,9 +131,9 @@ if (!pre || !pre.ok) {
 }
 const title = pre.title || change
 const openTasks = (pre.changeTasks || []).filter((t) => !t.done)
-log(`preflight ok — ${pre.changeTasks.length} change task(s), ${openTasks.length} open; planning ${openTasks.length} test+code pair(s)`)
+log(`preflight ok — ${pre.changeTasks.length} change task(s), ${openTasks.length} open; grouping into a few TDD units`)
 if (!openTasks.length) {
-  return { stage: 'plan', ok: true, change, handoffDir, pairs: 0, taskFiles: [], notes: 'no open change tasks — nothing to plan', nextStep: `No open tasks in ${change}'s tasks.md — nothing to plan.` }
+  return { stage: 'plan', ok: true, change, handoffDir, units: 0, pairs: 0, unitFiles: [], notes: 'no open change tasks — nothing to plan', nextStep: `No open tasks in ${change}'s tasks.md — nothing to plan.` }
 }
 
 // ---------------------------------------------------------------- Phase 2: Plan (write the handoff)
@@ -149,20 +148,21 @@ const CONTEXT = [
 
 const plan = await agent(
   [
-    `Write the execution handoff for OpenSpec change "${change}" into "${handoffDir}/". Apply ${SKILL('planning-and-task-breakdown')} and ${SKILL('test-driven-development')} (the test tasks are the Red plan).`,
+    `Write the execution handoff for OpenSpec change "${change}" into "${handoffDir}/". Apply ${SKILL('planning-and-task-breakdown')} and ${SKILL('test-driven-development')} (each unit's tests are its Red plan).`,
     CONTEXT,
-    `For EACH OPEN task in the change's tasks.md (${openTasks.map((t) => t.n + '. ' + t.text).join(' | ')}), produce a TEST task and a CODE task:`,
-    `- The TEST task captures the failing test to write first: which *_test.go file, and the concrete assertions/table cases derived from the relevant delta-spec scenarios + acceptance criteria. Its verify line asserts the test fails before implementation (Red).`,
-    `- The CODE task captures the minimal production change to make that test pass (which .go file, the behavior). It depends_on the test task. Its verify line: the test passes (Green) + make vet/test green.`,
-    `If a change task is doc-only / pure-config with no testable behavior, still emit the pair but set the test task's skipRed=true with a one-line reason in its Goal (never skip silently).`,
-    `changeRoot is ${pre.changeRoot}. Write every file per the format below, then return the handoff dir, the pair count, and the list of task files.`,
+    `GROUP these OPEN tasks.md items into a FEW test-first units (aim 1-4; collapse a small change to ONE unit). Open tasks: ${openTasks.map((t) => t.n + '. ' + t.text).join(' | ')}.`,
+    `- Cluster the tasks by natural seam (package / capability / spec requirement). Each cluster becomes ONE unit covering several tasks.md ordinals (coversTasks).`,
+    `- For each unit: list its testDeliverables (the *_test.go to write first, with assertions/table cases drawn from the delta-spec scenarios — these fail before the code: Red) and its codeDeliverables (the production .go files that make them pass: Green).`,
+    `- Do NOT emit one unit per tasks.md line. Fewer, larger units is the goal — the implementing agent handles a whole unit in one Red→Green→commit.`,
+    `- A doc-only/pure-config unit sets skipRed=true with a one-line reason in its Goal (never skip silently).`,
+    `Every open tasks.md ordinal MUST be covered by exactly one unit. changeRoot is ${pre.changeRoot}. Write every file per the format below, then return the handoff dir, the unit count, and the list of unit files.`,
     ``,
     HANDOFF_FORMAT,
   ].join('\n'),
   { schema: PLAN, label: 'write-handoff', phase: 'Plan', agentType: 'general-purpose' },
 )
 if (!plan) return { stage: 'plan', ok: false, reason: 'plan agent returned null', change, handoffDir }
-log(`plan: wrote ${plan.pairs} pair(s), ${plan.taskFiles.length} task file(s) under ${handoffDir}`)
+log(`plan: wrote ${plan.units} unit(s), ${plan.unitFiles.length} file(s) under ${handoffDir}`)
 
 // ---------------------------------------------------------------- Report
 return {
@@ -171,9 +171,10 @@ return {
   change,
   title,
   handoffDir,
-  pairs: plan.pairs,
-  taskFiles: plan.taskFiles,
+  units: plan.units,
+  pairs: plan.units, // back-compat: ship-all reads `.pairs` to decide if there is work
+  unitFiles: plan.unitFiles,
   localOnly: local,
   notes: plan.notes,
-  nextStep: `Handoff written to ${handoffDir}/ (${plan.pairs} test+code pair(s))${local ? ' — localOnly=true' : ''}. Review/edit the tasks, then run /opsx:ship-code ${change}${local ? ' --local' : ''} to implement them (one red+green commit per pair).`,
+  nextStep: `Handoff written to ${handoffDir}/ (${plan.units} TDD unit(s))${local ? ' — localOnly=true' : ''}. Review/edit the units, then run /opsx:ship-code ${change}${local ? ' --local' : ''} to implement them (one red+green commit per unit).`,
 }

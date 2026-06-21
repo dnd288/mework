@@ -1,10 +1,10 @@
 export const meta = {
   name: 'ship-code',
   description:
-    'Execute a ship-plan handoff for an APPROVED OpenSpec change, task-by-task, test-first. Preflight (tools+toolchain check, validate, clean tree, branch, load .handoff/<change>/plan.json) → for EACH change task (a test+code pair) run Red (write the failing test, confirm it fails) then Green (implement minimal code, confirm it passes, tick tasks.md) and make ONE commit containing both the test and the implementation → full Verify (make vet/test + coverage + openspec validate, repair loop) → Evidence (openspec/changes/<name>/evidence/). Then it forks based on args.local: the REMOTE path syncs delta specs → prepends a CHANGELOG entry → a final chore commit → push + open/update a PR (stops at PR opened, no auto-merge). The LOCAL path (args.local=true) instead runs Local review (code-review-and-quality + security-and-hardening audit of the diff vs base) → merges feat/<change> into <base> locally (squash/no-ff/ff-only) → re-runs verify on base → sync delta specs → archives the change to openspec/changes/archive/YYYY-MM-DD-<change>/ → optional semver tag → chore commit + branch delete + optional git push origin <base> (noPushMain=true by default). Honors dryRun (commits locally, skips push/PR on remote path; on local path, refuses merge and stops at Verify), only:<pair>, retryBlocked, a token budget reserve, mergeStrategy, bump, noPushMain, archive, skipReview, and base.',
+    'Execute a ship-plan handoff for an APPROVED OpenSpec change, unit-by-unit, test-first. Preflight (tools+toolchain check, validate, clean tree, branch, load .handoff/<change>/plan.json — a FEW test-first units) → for EACH unit run Red (write the unit\'s failing test(s), confirm they fail) then Green (implement the minimal code across the unit\'s files, confirm they pass, tick every tasks.md item the unit covers) and make ONE commit for the unit → full Verify (make vet/test + coverage + openspec validate, repair loop; every gate re-activates a go >=1.25 toolchain) → Evidence (openspec/changes/<name>/evidence/). Then it forks based on args.local: the REMOTE path syncs delta specs → prepends a CHANGELOG entry → a final chore commit → push + open/update a PR (stops at PR opened, no auto-merge). The LOCAL path (args.local=true) instead runs Local review (code-review-and-quality + security-and-hardening audit of the diff vs base) → merges feat/<change> into <base> locally (squash/no-ff/ff-only) → re-runs verify on base → sync delta specs → archives the change to openspec/changes/archive/YYYY-MM-DD-<change>/ → optional semver tag → (with args.openPr) push feat/<change> + open a PR for review → chore commit + local branch delete + optional git push origin <base> (noPushMain=true by default). When all units are already done on the local path it skips Implement and still verifies/merges/archives (clean resume). Honors dryRun, only:<unit>, retryBlocked, a token budget reserve, mergeStrategy, bump, noPushMain, archive, skipReview, openPr, and base.',
   phases: [
     { title: 'Preflight',           detail: 'tools+toolchain, validate, branch, load handoff (--local checks base + branch slug match)' },
-    { title: 'Implement',           detail: 'per pair: Red → Green → one commit (red+green)' },
+    { title: 'Implement',           detail: 'per unit: Red → Green → one commit (a FEW units, not one per task)' },
     { title: 'Verify',              detail: 'make vet/test + coverage + openspec validate, repair loop' },
     { title: 'Local review',        detail: '(--local) code-review-and-quality + security-and-hardening audit of diff vs base' },
     { title: 'Evidence',            detail: 'write test results, coverage, gates to evidence/' },
@@ -13,6 +13,7 @@ export const meta = {
     { title: 'Sync',                detail: 'merge delta specs into openspec/specs/' },
     { title: 'Archive',             detail: '(--local) mv openspec/changes/<c>/ → archive/YYYY-MM-DD-<c>/' },
     { title: 'Tag',                 detail: '(--local, --bump) optional git tag -a vX.Y.Z on main' },
+    { title: 'Open PR',             detail: '(--local, --openPr) push feat/<change> + gh pr create for review' },
     { title: 'Cleanup',             detail: '(--local) chore commit + branch -D + optional push main + post-merge.md' },
     { title: 'Changelog',           detail: 'prepend a Keep a Changelog entry' },
     { title: 'Finalize',            detail: 'remote: chore commit + push + gh pr create (skipped on dryRun); --local: ship report' },
@@ -30,6 +31,11 @@ const retryBlocked = !!A.retryBlocked
 const reserve = A.reserveTokens || 60000
 const maxRepairs = typeof A.maxRepairs === 'number' ? A.maxRepairs : 2
 const REQUIRED_GO_MINOR = 25
+// Toolchain note injected into EVERY phase that runs go/make (Red, Green, Verify).
+// Each agent runs in a fresh shell, so the PATH that preflight resolved does NOT
+// carry over — every gate must re-activate a go >= 1.25 itself or it will hit a
+// stale go (e.g. /usr/local/go) and fail with "invalid go version".
+const TOOLCHAIN_NOTE = `TOOLCHAIN (do this FIRST, before any go/make/go test command): go.mod requires go 1.${REQUIRED_GO_MINOR}.x. Run \`go version\`; if it is older than 1.${REQUIRED_GO_MINOR} (a stale go on PATH such as /usr/local/go can shadow a newer one), locate a newer toolchain via \`which -a go\` and \`ls /opt/homebrew/bin/go /opt/homebrew/Cellar/go*/*/bin/go 2>/dev/null\`, then \`export PATH=<dir-of-the-1.${REQUIRED_GO_MINOR}+-go>:$PATH\` and re-check \`go version\` before continuing — make and go test inherit this PATH.`
 // --local: fully-local ship path (no gh, no remote push unless --push-main)
 const local = A.local === true
 const base = A.base || 'main'
@@ -39,9 +45,12 @@ const noPushMain = A.noPushMain !== false // default true
 const archive = A.archive !== false // default true
 const skipReview = !!A.skipReview
 const keepBranch = !!A.keepBranch
+// --openPr (LOCAL path): after the local merge, also push the feature branch and open a
+// PR for the record/human review. Forces the local branch to be kept on origin.
+const openPr = A.openPr === true
 
 if (!change || typeof change !== 'string') {
-  throw new Error('ship-code requires args { change, date, dryRun?, only?, retryBlocked?, reserveTokens?, local?, base?, mergeStrategy?, bump?, noPushMain?, archive?, skipReview?, keepBranch? }; got typeof=' + (typeof args) + ' keys=' + Object.keys(A).join(','))
+  throw new Error('ship-code requires args { change, date, dryRun?, only?, retryBlocked?, reserveTokens?, local?, base?, mergeStrategy?, bump?, noPushMain?, archive?, skipReview?, keepBranch?, openPr? }; got typeof=' + (typeof args) + ' keys=' + Object.keys(A).join(','))
 }
 if (!/^[a-z0-9][a-z0-9-]*$/.test(change)) throw new Error('Unsafe change name (expected kebab-case slug): ' + change)
 if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Unsafe date (expected YYYY-MM-DD): ' + date)
@@ -70,11 +79,12 @@ const allSkills = Array.from(new Set(Object.values(SKILLS).flat()))
 
 // ---------------------------------------------------------------- schemas
 const TASKREF = {
-  type: 'object', additionalProperties: false, required: ['id', 'role', 'status', 'file', 'deliverable', 'verify'],
+  type: 'object', additionalProperties: false, required: ['id', 'role', 'status', 'file', 'deliverables', 'verify'],
   properties: {
     id: { type: 'string' }, role: { type: 'string', enum: ['test', 'code'] },
-    status: { type: 'string' }, file: { type: 'string', description: 'handoff task-file path' },
-    deliverable: { type: 'string' }, verify: { type: 'string' },
+    status: { type: 'string' }, file: { type: 'string', description: 'handoff unit-file path' },
+    deliverables: { type: 'array', items: { type: 'string' }, description: 'repo-relative files this side of the unit writes (may be several)' },
+    verify: { type: 'string' },
     skipRed: { type: 'boolean' },
   },
 }
@@ -88,13 +98,14 @@ const PREFLIGHT = {
     tasksPath: { type: 'string' }, specPaths: { type: 'array', items: { type: 'string' } },
     title: { type: 'string' },
     pairs: {
-      type: 'array', description: 'change tasks as test+code pairs, in dependency order',
+      type: 'array', description: 'the change as a FEW test-first units, in dependency order (one entry per plan.json unit)',
       items: {
         type: 'object', additionalProperties: false, required: ['pair', 'title', 'test', 'code', 'allDone'],
         properties: {
-          pair: { type: 'string' }, title: { type: 'string' },
+          pair: { type: 'string', description: 'unit id, e.g. "01"' }, title: { type: 'string' },
+          coversTasks: { type: 'array', items: { type: 'string' }, description: 'tasks.md ordinals this unit realizes' },
           test: TASKREF, code: TASKREF,
-          allDone: { type: 'boolean', description: 'both tasks already done (skip unless retryBlocked/only)' },
+          allDone: { type: 'boolean', description: 'unit already done (skip unless retryBlocked/only)' },
         },
       },
     },
@@ -210,7 +221,7 @@ const pre = await agent(
     `   - If a newer toolchain is found and activated, set toolchainOk=true and capture the resolved goVersion.`,
     `   - If NO 1.${REQUIRED_GO_MINOR}+ toolchain can be located anywhere on the machine, set toolchainOk=false AND ok=false AND reason="go >= 1.${REQUIRED_GO_MINOR} not found on this machine (have: <list of versions found>); install with \`brew install go@1.${REQUIRED_GO_MINOR}\` (or equivalent) and re-run" AND STOP. Do NOT silently fall back to "toolchainOk=true" when nothing >= 1.${REQUIRED_GO_MINOR} exists — verify gates WILL fail with cryptic errors and the user will not understand why.`,
     `   - gh is OPTIONAL — only required when args.local is false (the local path never calls gh).`,
-    `2. Load the handoff: read "${handoffDir}/plan.json". If it does not exist, set ok=false, reason="no handoff — run /opsx:ship-plan ${change} first" and STOP. Group its tasks into pairs by the "pair" field (each pair has a role:test and role:code task); order pairs by ascending pair number. For each task set file="${handoffDir}/tasks/<id-with-dash>.md" (e.g. id "01a" → "01-a-test.md", "01b" → "01-b-code.md"). allDone = both tasks status=="done".`,
+    `2. Load the handoff: read "${handoffDir}/plan.json". If it does not exist, set ok=false, reason="no handoff — run /opsx:ship-plan ${change} first" and STOP. It contains a "units" array (a FEW test-first work-units). Map EACH unit to one entry in the returned pairs array (one Red→Green→commit per unit), ordered by ascending id: pair=unit.id; title=unit.title; coversTasks=unit.coversTasks; allDone=(unit.status=="done"); file (for both test and code) = "${handoffDir}/tasks/<unit.id>-<unit.slug>.md"; test={id:unit.id, role:"test", status:unit.status, file, deliverables:unit.testDeliverables, verify:unit.verify, skipRed:unit.skipRed}; code={id:unit.id, role:"code", status:unit.status, file, deliverables:unit.codeDeliverables, verify:unit.verify}. (Legacy fallback: if plan.json has the old "tasks" array instead of "units", group tasks into pairs by their "pair" field and set deliverables=[task.deliverable].)`,
     `3. openspec status --change "${change}" --json — capture changeRoot, proposal/tasks paths, delta-spec paths, title. openspec list --json — capture isActive (change present in active list) and isArchived (change present in archive list).`,
     `4. openspec validate "${change}" --strict (fallback non-strict) — MUST pass else ok=false+reason+STOP.`,
     `5. WORKING-TREE HYGIENE: git status --porcelain. ${handoffDir}/ is gitignored and does not count. Two cases:`,
@@ -241,8 +252,16 @@ if (onlyPair && !pairs.length) {
 }
 const runnable = pairs.filter((p) => !p.allDone || retryBlocked || onlyPair)
 log(`preflight ok — ${pre.pairs.length} pair(s); running ${runnable.length}${dryRun ? ' (dryRun: local commits, no push/PR)' : ''}`)
-if (!runnable.length) {
+if (!runnable.length && !local) {
+  // Remote path: nothing to implement and no local merge to perform — stop here.
   return { stage: 'implement', ok: true, change, branch, commits: [], notes: 'all pairs already done — nothing to implement', nextStep: `All handoff pairs are marked done. Re-run with retryBlocked to force, or proceed to /opsx:archive ${change} after merge.` }
+}
+if (!runnable.length) {
+  // LOCAL path: the change is fully implemented (e.g. a resumed change whose
+  // per-pair commits already exist) but not yet merged/archived. Do NOT stop —
+  // fall through with an empty Implement loop to Verify → review → merge → archive
+  // so the already-implemented branch still ships.
+  log('all pairs already done — skipping Implement; proceeding to Verify + local merge')
 }
 
 // ---------------------------------------------------------------- Phase 2: Implement (per pair: Red → Green → one commit)
@@ -253,38 +272,43 @@ for (const p of runnable) {
   if (budget && budget.total && budget.remaining() < reserve) {
     log(`budget reserve reached — stopping before pair ${p.pair} (${runnable.length - commits.length} pair(s) left)`); break
   }
-  log(`pair ${p.pair}: ${p.title}`)
+  const testFiles = (p.test.deliverables || []).join(', ') || '(none)'
+  const codeFiles = (p.code.deliverables || []).join(', ') || '(none)'
+  const covers = (p.coversTasks || []).join(', ') || p.pair
+  log(`unit ${p.pair}: ${p.title} (covers tasks ${covers})`)
 
   // --- Red
   const red = await agent(
     [
-      `Pair ${p.pair} of change "${change}" — the RED step. ${skillNote('Test')}`,
+      `Unit ${p.pair} of change "${change}" — the RED step. ${skillNote('Test')}`,
       CONTEXT,
-      `Read the test task file "${p.test.file}" and write its deliverable "${p.test.deliverable}" exactly as specified (table-driven Go test).`,
+      TOOLCHAIN_NOTE,
+      `Read the unit file "${p.test.file}" (its "Test plan (Red)" section). Write ALL of this unit's test deliverables — ${testFiles} — as table-driven Go tests, with the assertions/table cases the unit specifies (drawn from the delta-spec scenarios).`,
       p.test.skipRed
-        ? `This task is marked skipRed (doc-only/non-testable). Set skipRed=true with the reason; do not fabricate a test.`
-        : `Then run: go test ./<the deliverable's package>/... — and CONFIRM IT FAILS (undefined symbol or failing assertion). Set redConfirmed=true ONLY after observing the failure. Put the failing output in failureLog.`,
-      `Write ONLY the test deliverable in this step (no production code). Do NOT commit. Update the task file's status frontmatter to "done" and append a one-line "## Output log" note.`,
+        ? `This unit is marked skipRed (doc-only/non-testable). Set skipRed=true with the reason; do not fabricate a test.`
+        : `Then run: go test ./<the package(s) of those files>/... — and CONFIRM IT FAILS (undefined symbols or failing assertions). Set redConfirmed=true ONLY after observing the failure. Put the failing output in failureLog.`,
+      `Write ONLY the test deliverables in this step (no production code). Do NOT commit. Update the unit file's status frontmatter to reflect the Red step done and append a one-line "## Output log" note.`,
     ].join('\n'),
     { schema: RED, label: `red:${p.pair}`, phase: 'Implement', agentType: 'general-purpose' },
   )
   if (!red) { blocked = { pair: p.pair, why: 'red agent returned null' }; break }
   if (!red.skipRed && !red.redConfirmed) {
-    blocked = { pair: p.pair, why: 'Red not confirmed — the new test did not fail before implementation. ' + (red.failureLog || '') }; break
+    blocked = { pair: p.pair, why: 'Red not confirmed — the new test(s) did not fail before implementation. ' + (red.failureLog || '') }; break
   }
 
   // --- Green + single commit (red+green together)
   const green = await agent(
     [
-      `Pair ${p.pair} of change "${change}" — the GREEN step + commit. ${skillNote('Implement')}`,
+      `Unit ${p.pair} of change "${change}" — the GREEN step + commit. ${skillNote('Implement')}`,
       CONTEXT,
-      `Read the code task file "${p.code.file}". Make the MINIMAL production change in its deliverable "${p.code.deliverable}" to turn the failing test from the Red step GREEN. Do not over-build.`,
-      red.skipRed ? `(No Red test — implement the doc/config change described.)` : `Run: go test ./<package>/... — it MUST pass. Iterate up to ${maxRepairs} times if needed (fix production code, not the test). If it still fails, set greenConfirmed=false and put the output in failureLog (do not commit).`,
-      `Tick the matching task in the OpenSpec change tasks file ${pre.tasksPath} ("- [ ]" → "- [x]" for change task ${p.pair}); set taskTicked.`,
-      `Update the code task file "${p.code.file}" status to "done" + a one-line Output log.`,
-      `THEN make ONE commit containing BOTH the test and the implementation for this pair:`,
+      TOOLCHAIN_NOTE,
+      `Read the unit file "${p.code.file}" (its "Code plan (Green)" section). Make the MINIMAL production change across this unit's code deliverables — ${codeFiles} — to turn the failing test(s) from the Red step GREEN. Do not over-build.`,
+      red.skipRed ? `(No Red test — implement the doc/config change described.)` : `Run: go test ./<the package(s)>/... — they MUST pass. Iterate up to ${maxRepairs} times if needed (fix production code, not the tests). If still failing, set greenConfirmed=false and put the output in failureLog (do not commit).`,
+      `Tick EVERY OpenSpec task this unit realizes in ${pre.tasksPath} ("- [ ]" → "- [x]" for change task(s) ${covers}); set taskTicked.`,
+      `Update the unit file "${p.code.file}" status to "done" + a one-line Output log.`,
+      `THEN make ONE commit containing the whole unit (all tests + all implementation):`,
       `  git add -A  (note ${handoffDir}/ is gitignored and won't be staged)`,
-      `  git commit -m "feat: ${p.title} (${change} task ${p.pair})" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"`,
+      `  git commit -m "feat: ${p.title} (${change} unit ${p.pair})" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"`,
       `Set committed=true and sha=<short hash>. If greenConfirmed is false, do NOT commit (committed=false).`,
     ].filter(Boolean).join('\n'),
     { schema: GREEN, label: `green:${p.pair}`, phase: 'Implement', agentType: 'general-purpose' },
@@ -306,6 +330,7 @@ const coverProfile = `/tmp/shipcode-${change}.cover`
 function verifyPrompt() {
   return [
     `Verify the full tree on branch "${branch}" for change "${change}". DETERMINISTIC gate — pass is exit-code-driven. Use Bash, run in order:`,
+    TOOLCHAIN_NOTE,
     `1. go build ./...   2. make vet   3. go test -p 1 -coverprofile=${coverProfile} ./...  (DB tests skip without TEST_DATABASE_URL — not a failure)`,
     `4. go tool cover -func=${coverProfile} | tail -1 → coverage.   5. openspec validate "${change}" --strict (fallback non-strict).`,
     `pass=true only if every gate that ran exited 0 and all tests are green. List gates in gatesRun. On failure, pass=false + first failing gate's trimmed output in failureLog. Do not edit files.`,
@@ -533,6 +558,38 @@ if (local) {
     log(`tag: ${tagged.tagged ? tagged.tag : (tagged.reason || 'failed')}`)
   }
 
+  // Phase 5e2: Open PR (LOCAL path + --openPr) — push the feature branch and open a PR
+  // for the record/human review. Runs BEFORE Cleanup deletes the LOCAL branch; the
+  // pushed origin branch (and its PR) persists after the local delete. origin/${base}
+  // is NOT updated (noPushMain), so a PR ${branch} → ${base} shows the full change.
+  let prResult = { prCreated: false, prUrl: null, prReason: openPr ? 'pending' : 'openPr not requested' }
+  if (openPr) {
+    phase('Open PR')
+    if (budget && budget.total && budget.remaining() < reserve) {
+      prResult = { prCreated: false, prUrl: null, prReason: 'budget reserve reached before PR (merge already committed locally)' }
+    } else {
+      const evDir = archived.archived ? `${archived.archivePath}/evidence` : `${pre.changeRoot}/evidence`
+      const pr = await agent(
+        [
+          `Open a PR for change "${change}" (title: "${title}"). The feature branch "${branch}" holds the change's per-unit commits and has been merged into LOCAL "${base}" (origin/${base} is NOT updated, so a PR ${branch} → ${base} shows the full change diff). Use Bash (git + gh). ${skillNote('PR')}`,
+          `1. Push the branch: git push -u origin "${branch}". If origin is missing or the push fails, set prCreated=false, prReason=<error>, prUrl=null and STOP (NON-FATAL — the local merge already happened; just report it).`,
+          `2. Reuse-or-create: gh pr view "${branch}" --json url,state 2>/dev/null. If an OPEN PR already exists, reuse its url (prCreated=false, prReason="exists"). Otherwise create one:`,
+          `   gh pr create --base "${base}" --head "${branch}" --title "feat: ${title} (${change})" --body "<2-4 sentence summary drawn from ${pre.proposalPath || 'the proposal'}. Then: 'Local-merged into ${base} at ${mergeResult.mergeSha}; archived to ${archived.archivePath || '(no-archive)'}. Evidence: ${evDir}.' and a final line 'Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>'>"`,
+          `3. Capture the resulting PR url. Return { prCreated, prUrl, prReason }. Do NOT merge or close the PR, and do NOT delete the branch here.`,
+        ].join('\n'),
+        {
+          schema: {
+            type: 'object', additionalProperties: false, required: ['prCreated', 'prUrl', 'prReason'],
+            properties: { prCreated: { type: 'boolean' }, prUrl: { type: ['string', 'null'] }, prReason: { type: 'string' } },
+          },
+          label: 'open-pr', phase: 'Open PR', agentType: 'general-purpose',
+        },
+      )
+      prResult = pr || { prCreated: false, prUrl: null, prReason: 'open-pr agent returned null' }
+      log(`open-pr: ${prResult.prUrl || prResult.prReason}`)
+    }
+  }
+
   // Phase 5f: Cleanup — chore commit (evidence+sync+archive+changelog), branch -D, optional push main, post-merge.md
   phase('Cleanup')
   if (budget && budget.total && budget.remaining() < reserve) {
@@ -611,13 +668,18 @@ if (local) {
     choreSha: fin ? fin.choreSha : null,
     pushed: !!(fin && fin.pushed),
     pushReason: fin ? fin.pushReason : '',
+    prCreated: !!prResult.prCreated,
+    prUrl: prResult.prUrl || null,
+    prReason: prResult.prReason || '',
     evidenceDir: evidenceDirArchived,
     postMergeEvidence: `${evidenceDirArchived}/post-merge.md`,
     skillsApplied: allSkills,
     notes: fin ? fin.notes : 'cleanup agent returned null',
-    nextStep: (fin && fin.pushed)
-      ? `Pushed ${base} (and tag ${tagged.tag || ''}) to origin. Verify on origin, then move to the next change.`
-      : `Fully local ship complete. ${base} advanced by ${commits.length + 2} commit(s); ${change} archived to ${archived.archivePath || '(no-archive)'}${tagged.tag ? '; tag ' + tagged.tag + ' created locally' : ''}. Inspect: git log --oneline -${commits.length + 3} ; cat ${evidenceDirArchived}/post-merge.md`,
+    nextStep: prResult.prUrl
+      ? `Merged into ${base} locally and opened PR ${prResult.prUrl} for review. ${base} advanced by ${commits.length + 2} commit(s); ${change} archived to ${archived.archivePath || '(no-archive)'}. The PR shows the change diff; merging/pushing ${base} later closes it.`
+      : (fin && fin.pushed)
+        ? `Pushed ${base} (and tag ${tagged.tag || ''}) to origin. Verify on origin, then move to the next change.`
+        : `Fully local ship complete${openPr ? ' (PR not opened: ' + prResult.prReason + ')' : ''}. ${base} advanced by ${commits.length + 2} commit(s); ${change} archived to ${archived.archivePath || '(no-archive)'}${tagged.tag ? '; tag ' + tagged.tag + ' created locally' : ''}. Inspect: git log --oneline -${commits.length + 3} ; cat ${evidenceDirArchived}/post-merge.md`,
   }
 }
 

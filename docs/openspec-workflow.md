@@ -362,17 +362,24 @@ owns the implementation. For every change that ships, it first runs **branch-pre
 workflows via the lowercase `workflow()` helper — `workflow('ship-plan', …)` then
 `workflow('ship-code', …)`. (It does **not** spawn an agent that calls `Workflow()`;
 workflow-spawned subagents have no `Workflow()` tool — that was the original break.)
-There is **no standalone `/opsx:apply`** step: `ship-code` implements every open task
-test-first (Red→Green→one commit per pair). A bulk apply would write uncommitted code
-and trip `ship-code`'s clean-tree preflight.
+`ship-plan` groups the change into a **few test-first units** (aim 1–4; each may span
+several files) — **not** one unit per tasks.md line — and `ship-code` runs each unit
+Red→Green→**one commit per unit**. There is **no standalone `/opsx:apply`** step (a
+bulk apply would write uncommitted code and trip `ship-code`'s clean-tree preflight).
+After review, each change **merges into `main` locally** (so the next dependency-
+ordered change builds on it) **and opens a PR** (`gh pr create`) for the record/human
+review — result: the project on `main` plus one PR per change.
+
+> The fine-grained "pair per OpenSpec task" handoff (28 files / 14 commits / ~2h for
+> a 14-task change) proved too slow; the coarse "few units" model is the fix.
 
 **Per-change mode** (decided from `openspec status --change <c> --json`):
 
 | `openspec status` | Mode | Steps |
 |---|---|---|
-| full artifacts, `.openspec.yaml` present, 0 tasks done | `apply+ship` | branch-prep → `ship-plan` → `ship-code --local` (ship-code implements every open task test-first, then merges + archives) |
-| full artifacts, all tasks `[x]`, no evidence/ | `spec+ship` | branch-prep → (`spec-change` quality pass, skipped by default in batch) → `ship-plan` → `ship-code --local` |
-| full artifacts, all tasks `[x]`, evidence/ present | `ship-only` | branch-prep → `ship-plan` (0 pairs) → `ship-code --local` (verifies, merges, archives) |
+| full artifacts, `.openspec.yaml` present, 0 tasks done | `apply+ship` | branch-prep → `ship-plan` (few units) → `ship-code --local --openPr` (implements each unit test-first → review → local merge → archive → open PR) |
+| full artifacts, all tasks `[x]`, no evidence/ | `spec+ship` | branch-prep → (`spec-change` quality pass, skipped by default in batch) → `ship-plan` → `ship-code --local --openPr` |
+| full artifacts, all tasks `[x]`, evidence/ present | `ship-only` | branch-prep → `ship-plan` (0 units) → `ship-code --local --openPr` (verifies, review, merges, archives, open PR) |
 | missing `.openspec.yaml` (scaffolding-only, e.g. c0014a/b/c) | `repair+ship` | `openspec new change <c>` (additive) → promote to `apply+ship` → branch-prep → ship-plan → ship-code |
 | tasks all `[x]`, no `feat/<c>` branch, evidence + sync done | `archive-only` | `openspec archive <c> -y --skip-specs --no-validate` |
 | already ARCHIVED, OR active but no tasks.md | `skip` | logged; never halts |

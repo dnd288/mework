@@ -24,17 +24,22 @@ every change that ships, the orchestrator first runs **branch-prep** — from a 
 nested workflows via the lowercase `workflow()` helper (NOT by spawning an agent
 that calls `Workflow()` — workflow-spawned subagents have no `Workflow()` tool):
 
-1. `workflow('ship-plan', { change, date, local: true })` — breaks the change's
-   **open tasks** into test+code pairs under `.handoff/<change>/` (gitignored).
-2. `workflow('ship-code', { change, date, local: true, base: 'main', bump,
-   noPushMain, archive, mergeStrategy, reserveTokens, maxRepairs })` — runs each
-   pair **test-first** (Red→Green→one commit), verifies, reviews, then merges
-   `feat/<change>` into `main` **locally (no PR)**, syncs delta specs, archives,
-   and optionally tags.
+1. `workflow('ship-plan', { change, date, local: true })` — groups the change's
+   **open tasks** into a **few test-first units** (aim 1-4; each unit may span
+   several files) under `.handoff/<change>/` (gitignored). NOT one unit per
+   tasks.md line.
+2. `workflow('ship-code', { change, date, local: true, openPr: true, base: 'main',
+   bump, noPushMain, archive, mergeStrategy, reserveTokens, maxRepairs })` — runs
+   each unit **test-first** (Red→Green→one commit per unit), verifies, **reviews**
+   (code-review-and-quality + security), then **merges `feat/<change>` into `main`
+   locally** (so the next dependency-ordered change builds on it), syncs delta
+   specs, archives, optionally tags, and **pushes the branch + opens a PR** for the
+   record/human review.
 
 There is **no standalone `/opsx:apply`** step — `ship-code` does the implementation
-test-first per pair. (A bulk apply would write uncommitted code and trip
-`ship-code`'s clean-tree preflight.)
+test-first per unit. (A bulk apply would write uncommitted code and trip
+`ship-code`'s clean-tree preflight.) Result of a full run: the project on `main`
+plus one PR per change.
 
 ## Per-change decision
 
@@ -43,9 +48,9 @@ and `openspec list --json`, then classifies the change by **mode**:
 
 | Mode | Trigger | Steps run by orchestrator |
 |---|---|---|
-| `apply+ship` | Active, has proposal + design + tasks + specs + `.openspec.yaml`, **0 tasks done** | branch-prep (`feat/<c>` from `main`) → `ship-plan` → `ship-code --local` (ship-code implements every open task test-first, one commit per pair, then merges + archives) |
-| `spec+ship` | Active, all artifacts present, **all tasks `[x]`**, no evidence dir | branch-prep → (`workflow('spec-change', { change, maxRevisions: 1 })` when not `--skip-spec`) → `ship-plan` → `ship-code --local` |
-| `ship-only` | Active, all tasks `[x]`, evidence dir exists, delta spec already in `openspec/specs/` | branch-prep → `ship-plan` (0 pairs) → `ship-code --local` (verifies existing code, merges, archives) |
+| `apply+ship` | Active, has proposal + design + tasks + specs + `.openspec.yaml`, **0 tasks done** | branch-prep (`feat/<c>` from `main`) → `ship-plan` (few units) → `ship-code --local --openPr` (implements each unit test-first, one commit per unit, then review → local merge → archive → open PR) |
+| `spec+ship` | Active, all artifacts present, **all tasks `[x]`**, no evidence dir | branch-prep → (`workflow('spec-change', { change, maxRevisions: 1 })` when not `--skip-spec`) → `ship-plan` → `ship-code --local --openPr` |
+| `ship-only` | Active, all tasks `[x]`, evidence dir exists, delta spec already in `openspec/specs/` | branch-prep → `ship-plan` (0 units) → `ship-code --local --openPr` (verifies existing code, review, local merge, archive, open PR) |
 | `repair+ship` | Active, **missing `.openspec.yaml`** (scaffolding-only) | 1. `openspec new change <c>` (additive — does NOT touch existing proposal/design/tasks/specs) → 2. promote to `apply+ship` → 3. branch-prep → ship-plan → ship-code |
 | `archive-only` | Active, all tasks `[x]`, no `feat/<c>` branch, evidence dir + delta-spec sync complete, no code work expected | 1. `openspec archive <c> -y --skip-specs --no-validate` |
 | `skip` | Already ARCHIVED, OR active but no tasks.md (incomplete proposal) | Logged in `.ship-all-progress.json` → `progress.skipped`; never halts the run |

@@ -7,9 +7,9 @@ tags: [workflow, automation, pr, tdd, local, experimental]
 
 Carry an **approved** OpenSpec change from spec to **shipped** in one go, by
 orchestrating the two ship workflows: **ship-plan** (write a `.handoff/<change>/`
-breaking each change task into a test + code task) and **ship-code** (execute it
-task-by-task — Red→Green→one commit per change task — then verify, evidence,
-sync, and either open a PR or merge locally + archive).
+grouping the change into a few test-first units) and **ship-code** (execute it
+unit-by-unit — Red→Green→one commit per unit — then verify, review, evidence,
+sync, and either open a PR or merge locally + archive + open PR).
 
 **Two paths** are offered at the top:
 
