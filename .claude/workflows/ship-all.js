@@ -265,6 +265,7 @@ async function runOne(entry) {
     local: true,
     base: 'main',
     openPr: true, // each change: review → local merge (deps flow) → push branch + open a PR
+    skipReview: true, // skip code review gate — ship end-to-end
     mergeStrategy, bump, noPushMain, archive,
     reserveTokens: reserve, maxRepairs, force,
   }
