@@ -34,10 +34,10 @@ keys never leave the server.
 
 ## Impact
 
-- **Sequenced after `c0001-repo-restructure`**: the port lands in `shared/ports` and
+- **Sequenced after `c0002-repo-restructure`**: the port lands in `shared/ports` and
   drivers under `server/storage/{s3,minio,r2,fs}`, the module layout established by
   that change.
-- **Consumed by `c0009-session-workspaces`** (the `WorkspaceManager`/`WorkspaceFS`
+- **Consumed by `c0010-session-workspaces`** (the `WorkspaceManager`/`WorkspaceFS`
   layers sync to this store) and by **`c0013` artifacts** (artifact persistence and
   retrieval).
 - New driver-gated dependencies: an S3-compatible SDK for the `s3`/`minio`/`r2`

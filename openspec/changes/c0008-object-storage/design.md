@@ -21,7 +21,7 @@ drivers under `server/storage`, each implementing the port against one backend.
 - Per-driver dependency isolation: a build links only the SDK of the driver it wires.
 
 **Non-Goals:**
-- Workspace mount/sync/scope semantics (that is `c0009-session-workspaces`).
+- Workspace mount/sync/scope semantics (that is `c0010-session-workspaces`).
 - Artifact lifecycle and retention (that is `c0013` artifacts).
 - A bucket/lifecycle provisioning or migration tool — operators provision buckets.
 - Choosing one canonical backend; the port keeps all of them interchangeable.

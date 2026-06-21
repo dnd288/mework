@@ -12,7 +12,7 @@ import (
 // only in the test build (no production code). Reviewing them — together with how the
 // scenarios use them — is the point: evaluate the shapes and behaviors before building.
 // When implementation starts, these lift into internal/shared/transport + the capability
-// packages (openspec c0001 layout) and the World methods get real bodies.
+// packages (openspec c0002 layout) and the World methods get real bodies.
 // ============================================================================
 
 // ---- Identity & tenancy -----------------------------------------------------

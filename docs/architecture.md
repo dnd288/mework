@@ -134,8 +134,8 @@ minimal for the next. See [auth-and-secrets.md](auth-and-secrets.md).
 | Agent definition | static `profiles` row | versioned, pullable catalog artifact | `c0003-agent-catalog` |
 | Distribution | none (profile snapshot in job) | pull agent on dispatch | `c0003-agent-catalog` |
 | Permissions | none (implicit trust) | scoped grant per dispatch | `c0003-agent-catalog` |
-| Client identity | pre-registered `runtime` + `rt_token` | install-once enrollment + runner identity | `c0004-agent-runner` |
-| Client loop | poll worker | enrolled SSE pull→run→report | `c0004-agent-runner` |
+| Client identity | pre-registered `runtime` + `rt_token` | install-once enrollment + runner identity | `c0005-agent-runner` |
+| Client loop | poll worker | enrolled SSE pull→run→report | `c0005-agent-runner` |
 | Execution | bare host subprocess | pluggable sandbox driver | `c0005-sandbox-runtime` |
 | Isolation | a `0700` directory | container / driver isolation + limits | `c0005-sandbox-runtime` |
 
@@ -147,7 +147,7 @@ the REST write-back outbox, webhook ingestion (becomes *publish* instead of
 
 The redesign lands as five OpenSpec changes, in dependency order:
 
-0. **`c0001-repo-restructure`** — **foundational, lands first.** A pure mechanical
+0. **`c0002-repo-restructure`** — **foundational, lands first.** A pure mechanical
    refactor (zero behavior change) into `shared` / `client` / `server` / `platform`
    domains with an enforced one-way dependency rule, per-component build/test, and a
    single home (`internal/shared/transport`) for the client↔server wire contract — so
@@ -157,7 +157,7 @@ The redesign lands as five OpenSpec changes, in dependency order:
    bus.
 2. **`c0003-agent-catalog`** — pullable versioned agents (`publish`/`pull`/`dispatch`)
    + the permission/policy grant model. Extends the auth model with a runner identity.
-3. **`c0004-agent-runner`** — install-once enrollment + the SSE pull→run→report loop;
+3. **`c0005-agent-runner`** — install-once enrollment + the SSE pull→run→report loop;
    local grant enforcement.
 4. **`c0005-sandbox-runtime`** — pluggable isolated execution drivers (`local`/`docker`).
 

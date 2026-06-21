@@ -4,7 +4,7 @@ A dispatched run today is opaque after it leaves the hub: the runner pulls and
 runs an agent but emits nothing upstream, so no client can watch progress, no
 operator can see in-flight runs, and a stuck run can only be stopped by killing the
 host. `c0002-message-bus` gives us topics/subscriptions to carry upstream events
-and control messages; `c0004-agent-runner` gives us the enrolled runner that emits
+and control messages; `c0005-agent-runner` gives us the enrolled runner that emits
 events and owns the local sandbox. This change adds the live telemetry + control
 layer on top of those two.
 
@@ -21,7 +21,7 @@ layer on top of those two.
 
 **Non-Goals:**
 - The SSE/bus transport internals (`c0002-message-bus`).
-- The runner loop and sandbox driver internals (`c0004-agent-runner`,
+- The runner loop and sandbox driver internals (`c0005-agent-runner`,
   `sandbox-runtime`) — this change *drives* them.
 - Interactive multi-turn chat (separate conversation surface).
 - Long-term artifact retention beyond the bounded tail (artifact store is separate).

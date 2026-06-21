@@ -90,7 +90,7 @@ is captured as five active changes under `openspec/changes/`, landed in order:
 
 | Change | Adds | Status |
 |--------|------|--------|
-| `c0001-repo-restructure` | **lands first** — `shared`/`client`/`server`/`platform` domains, enforced dependency rule, per-component build/test | proposed |
+| `c0002-repo-restructure` | **lands first** — `shared`/`client`/`server`/`platform` domains, enforced dependency rule, per-component build/test | proposed |
 | `c0002-message-bus` | SSE pub/sub transport (topics, subscribe, resumable, pluggable broker) | proposed |
 | `c0003-agent-catalog` | versioned pullable agents + permission/policy grants | proposed |
 | `c0004-agent-runner` | install-once enrollment + SSE pull→run→report loop | proposed |

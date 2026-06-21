@@ -20,9 +20,9 @@
 
 ## 3. Wire selection into the dispatch path
 
-- [ ] 3.1 In `c0003-agent-catalog` dispatch handler, call `RunnerSelector.Select` after the quota check; on `ErrNoEligibleRunner` enqueue for retry.
+- [ ] 3.1 In `c0004-agent-catalog` dispatch handler, call `RunnerSelector.Select` after the quota check; on `ErrNoEligibleRunner` enqueue for retry.
 - [ ] 3.2 Persist the bound `(sessionID, runnerID)` so the next dispatch in the session resolves through the affinity path.
-- [ ] 3.3 In `c0005-sandbox-runtime` sandbox provisioning, call `SecretInjector.Inject` with the dispatch's grant before launching the agent process.
+- [ ] 3.3 In `c0006-sandbox-runtime` sandbox provisioning, call `SecretInjector.Inject` with the dispatch's grant before launching the agent process.
 
 ## 4. Validate
 

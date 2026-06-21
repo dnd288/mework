@@ -7,7 +7,7 @@ import "testing"
 // detection" (baseline) + c0005 (run via sandbox). Skips pending c0005.
 
 func TestAGENT_01_DetectOrder(t *testing.T) {
-	Scenario(t, "AGENT-01", "Backend detection prefers claude, then codex, then opencode", PlannedC0005).
+	Scenario(t, "AGENT-01", "Backend detection prefers claude, then codex, then opencode", PlannedC0006).
 		Given("only codex is installed on PATH", func(w *World) {
 			w.FakeAgent("codex", "echo-stdin")
 		}).
@@ -22,7 +22,7 @@ func TestAGENT_01_DetectOrder(t *testing.T) {
 }
 
 func TestAGENT_02_ClaudeBackendRun(t *testing.T) {
-	Scenario(t, "AGENT-02", "Claude Code backend runs an agent", PlannedC0005).
+	Scenario(t, "AGENT-02", "Claude Code backend runs an agent", PlannedC0006).
 		Given("claude is the selected backend in a sandbox", func(w *World) {
 			w.FakeAgent("claude", "echo-stdin")
 		}).
@@ -39,7 +39,7 @@ func TestAGENT_02_ClaudeBackendRun(t *testing.T) {
 }
 
 func TestAGENT_03_CodexBackendRun(t *testing.T) {
-	Scenario(t, "AGENT-03", "Codex backend runs an agent", PlannedC0005).
+	Scenario(t, "AGENT-03", "Codex backend runs an agent", PlannedC0006).
 		Given("codex is the selected backend in a sandbox", func(w *World) {
 			w.FakeAgent("codex", "echo-stdin")
 		}).
@@ -55,7 +55,7 @@ func TestAGENT_03_CodexBackendRun(t *testing.T) {
 }
 
 func TestAGENT_04_PromptOverStdin(t *testing.T) {
-	Scenario(t, "AGENT-04", "Backends receive the prompt over stdin", PlannedC0005).
+	Scenario(t, "AGENT-04", "Backends receive the prompt over stdin", PlannedC0006).
 		Given("a backend configured to echo its stdin", func(w *World) {
 			w.FakeAgent("claude", "echo-stdin")
 		}).
@@ -71,7 +71,7 @@ func TestAGENT_04_PromptOverStdin(t *testing.T) {
 }
 
 func TestAGENT_05_BackendUnavailable(t *testing.T) {
-	Scenario(t, "AGENT-05", "No installed backend is handled", PlannedC0005).
+	Scenario(t, "AGENT-05", "No installed backend is handled", PlannedC0006).
 		Given("no AI backend is on PATH", func(w *World) {}).
 		When("the runner checks availability", func(w *World) {
 			w.set("avail", w.Backend("claude").Available())

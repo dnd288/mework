@@ -15,14 +15,14 @@ source OpenSpec scenario and the doc it evaluates. Read a full scenario in its
 | Server & health | `01-server-and-health` | HEALTH-01..05 | Implemented |
 | Auth & grants | `02-auth-and-grants` | AUTH-01..08 | Impl + c0003 |
 | CLI onboarding | `03-cli-onboarding` | CLI-01..08 | Implemented |
-| Runner enroll | `04-runner-enroll` | ENROLL-01..05 | c0004 |
+| Runner enroll | `04-runner-enroll` | ENROLL-01..05 | c0005 |
 | Daemon lifecycle & execution | `05-daemon-lifecycle` | DAEMON-01..10 | Implemented |
 | Webhook intake & provider gateway | `06-webhook-intake` | HOOK-01..12 | Implemented |
 | Job queue (poll) | `07-jobs-poll` | JOB-01..09 | Implemented |
-| Message bus (SSE) | `08-message-bus-sse` | BUS-01..11 | c0002 |
-| Agent catalog | `09-agent-catalog` | CAT-01..10 | c0003 |
-| Runner loop | `10-runner-loop` | LOOP-01..07 | c0004 |
-| Sandbox execution | `11-sandbox-execution` | SBX-01..09 | c0005 |
+| Message bus (SSE) | `08-message-bus-sse` | BUS-01..11 | c0003 |
+| Agent catalog | `09-agent-catalog` | CAT-01..10 | c0004 |
+| Runner loop | `10-runner-loop` | LOOP-01..07 | c0005 |
+| Sandbox execution | `11-sandbox-execution` | SBX-01..09 | c0006 |
 | REST write-back | `12-rest-writeback` | WB-01..04 | Implemented |
 | Journeys | `13-journeys` | E2E-01..04 | Impl + target |
 
@@ -41,8 +41,8 @@ source OpenSpec scenario and the doc it evaluates. Read a full scenario in its
 | AUTH-04 | Authenticate by lookup hash | [Impl] | auth-and-secrets · Runtime token generation and lookup | auth-and-secrets.md |
 | AUTH-05 | Stored credential encrypted at rest | [Impl] | auth-and-secrets · Credential sealing at rest | auth-and-secrets.md |
 | AUTH-06 | Unseal only for write-back | [Impl] | auth-and-secrets · Credential sealing at rest | auth-and-secrets.md |
-| AUTH-07 | Runner credential required for transport routes | [Pl·c0003] | c0003 auth (MODIFIED) · Two-token authentication | auth-and-secrets.md |
-| AUTH-08 | Grant scopes the operation, not just identity | [Pl·c0003] | c0003 auth (MODIFIED) · Two-token authentication | auth-and-secrets.md |
+| AUTH-07 | Runner credential required for transport routes | [Pl·c0004] | c0003 auth (MODIFIED) · Two-token authentication | auth-and-secrets.md |
+| AUTH-08 | Grant scopes the operation, not just identity | [Pl·c0004] | c0003 auth (MODIFIED) · Two-token authentication | auth-and-secrets.md |
 | CLI-01 | Log in with a Mello PAT | [Impl] | cli · Command surface | cli-and-usage.md |
 | CLI-02 | Token file restrictive permissions | [Impl] | cli · Credential file safety | auth-and-secrets.md |
 | CLI-03 | Config precedence flag > env > file | [Impl] | cli · Configuration resolution | cli-and-usage.md |
@@ -51,11 +51,11 @@ source OpenSpec scenario and the doc it evaluates. Read a full scenario in its
 | CLI-06 | Register a runtime returns one-time token | [Impl] | cli · Command surface | cli-and-usage.md |
 | CLI-07 | Create & manage an AI profile | [Impl] | cli · Command surface | cli-and-usage.md |
 | CLI-08 | Machine-readable `--json` output | [Impl] | cli · Command surface | cli-and-usage.md |
-| ENROLL-01 | Enroll a new runner | [Pl·c0004] | agent-runner · Install-once enrollment | auth-and-secrets.md |
-| ENROLL-02 | Unattended after enrollment | [Pl·c0004] | agent-runner · Install-once enrollment | runtime-and-sandbox.md |
-| ENROLL-03 | Invalid/expired registration token rejected | [Pl·c0004] | agent-runner · Install-once enrollment | auth-and-secrets.md |
-| ENROLL-04 | Registration token not reusable as identity | [Pl·c0004] | agent-runner · Install-once enrollment | auth-and-secrets.md |
-| ENROLL-05 | Inspect dispatched agents and active sessions | [Pl·c0004] | c0004 cli (MODIFIED) · Command surface | cli-and-usage.md |
+| ENROLL-01 | Enroll a new runner | [Pl·c0005] | agent-runner · Install-once enrollment | auth-and-secrets.md |
+| ENROLL-02 | Unattended after enrollment | [Pl·c0005] | agent-runner · Install-once enrollment | runtime-and-sandbox.md |
+| ENROLL-03 | Invalid/expired registration token rejected | [Pl·c0005] | agent-runner · Install-once enrollment | auth-and-secrets.md |
+| ENROLL-04 | Registration token not reusable as identity | [Pl·c0005] | agent-runner · Install-once enrollment | auth-and-secrets.md |
+| ENROLL-05 | Inspect dispatched agents and active sessions | [Pl·c0005] | c0004 cli (MODIFIED) · Command surface | cli-and-usage.md |
 | DAEMON-01 | Start in the background | [Impl] | daemon-runtime · Daemon lifecycle management | runtime-and-sandbox.md |
 | DAEMON-02 | Inspect a running daemon | [Impl] | daemon-runtime · Daemon lifecycle management | runtime-and-sandbox.md |
 | DAEMON-03 | Stop gracefully with SIGTERM fallback | [Impl] | daemon-runtime · Daemon lifecycle management | runtime-and-sandbox.md |
@@ -87,43 +87,43 @@ source OpenSpec scenario and the doc it evaluates. Read a full scenario in its
 | JOB-07 | Ownership is enforced | [Impl] | daemon-runtime · Stateless poll worker | api-reference.md |
 | JOB-08 | Heartbeat extends the lease | [Impl] | job-queue · Heartbeat and lease | api-reference.md |
 | JOB-09 | Sweeper reclaims an abandoned job | [Impl] | job-queue · Lease sweeper | architecture.md |
-| BUS-01 | Publish to a topic with subscribers | [Pl·c0002] | message-bus · Topic-based publish | api-reference.md |
-| BUS-02 | Publish with no subscribers is retained | [Pl·c0002] | message-bus · Topic-based publish | architecture.md |
-| BUS-03 | Receive a pushed event | [Pl·c0002] | message-bus · SSE subscription contract | api-reference.md |
-| BUS-04 | Multiple topics on one stream | [Pl·c0002] | message-bus · SSE subscription contract | architecture.md |
-| BUS-05 | Resume after a dropped connection | [Pl·c0002] | message-bus · Resumable delivery | architecture.md |
-| BUS-06 | Ack marks a message handled | [Pl·c0002] | message-bus · Delivery acknowledgement | api-reference.md |
-| BUS-07 | Unacked message is redeliverable | [Pl·c0002] | message-bus · Delivery acknowledgement | architecture.md |
-| BUS-08 | Subscriber restricted to entitled topics | [Pl·c0002] | message-bus · SSE subscription contract | auth-and-secrets.md |
-| BUS-09 | Swap backend without breaking clients | [Pl·c0002] | message-bus · Pluggable broker backend | architecture.md |
-| BUS-10 | State tracked independently of transport | [Pl·c0002] | c0002 job-queue (MODIFIED) · Transactional state machine | architecture.md |
-| BUS-11 | Distinct events publish distinct messages | [Pl·c0002] | c0002 webhook (MODIFIED) · Idempotent enqueue | architecture.md |
-| CAT-01 | Publish a new agent version | [Pl·c0003] | agent-catalog · Versioned agent artifacts | api-reference.md |
-| CAT-02 | Republishing an existing version rejected | [Pl·c0003] | agent-catalog · Versioned agent artifacts | api-reference.md |
-| CAT-03 | Resolve a moving pointer (@latest) | [Pl·c0003] | agent-catalog · Versioned agent artifacts | api-reference.md |
-| CAT-04 | Pull a definition-form agent | [Pl·c0003] | agent-catalog · Type-agnostic artifact form | api-reference.md |
-| CAT-05 | Pull an image-form agent | [Pl·c0003] | agent-catalog · Type-agnostic artifact form | runtime-and-sandbox.md |
-| CAT-06 | Authorized pull succeeds | [Pl·c0003] | agent-catalog · Pull an agent | api-reference.md |
-| CAT-07 | Unauthorized pull is denied | [Pl·c0003] | agent-catalog · Pull an agent | auth-and-secrets.md |
-| CAT-08 | Dispatch reaches the target runner | [Pl·c0003] | agent-catalog · Dispatch an agent to a target | api-reference.md |
-| CAT-09 | Dispatch carries an explicit scoped grant | [Pl·c0003] | agent-catalog · Scoped permission grants | auth-and-secrets.md |
-| CAT-10 | Absent grant denies a privileged operation | [Pl·c0003] | agent-catalog · Scoped permission grants | philosophy.md |
-| LOOP-01 | Runner comes online (presence) | [Pl·c0004] | agent-runner · SSE subscription and presence | runtime-and-sandbox.md |
-| LOOP-02 | No interval polling when idle | [Pl·c0004] | c0004 daemon (MODIFIED) · Stateless poll worker | runtime-and-sandbox.md |
-| LOOP-03 | Receive a dispatch by push | [Pl·c0004] | agent-runner · SSE subscription and presence | architecture.md |
-| LOOP-04 | Successful dispatch lifecycle | [Pl·c0004] | agent-runner · Pull-run-report loop | runtime-and-sandbox.md |
-| LOOP-05 | Failed run reported, not dropped | [Pl·c0004] | agent-runner · Pull-run-report loop | runtime-and-sandbox.md |
-| LOOP-06 | Operation within the grant proceeds | [Pl·c0004] | agent-runner · Grant enforcement on the client | philosophy.md |
-| LOOP-07 | Operation outside the grant refused locally | [Pl·c0004] | agent-runner · Grant enforcement on the client | auth-and-secrets.md |
-| SBX-01 | Run an agent through the driver interface | [Pl·c0005] | sandbox-runtime · Sandbox driver interface | runtime-and-sandbox.md |
-| SBX-02 | Prompt never placed on the command line | [Pl·c0005] | sandbox-runtime · Sandbox driver interface | philosophy.md |
-| SBX-03 | Select the local driver | [Pl·c0005] | sandbox-runtime · Selectable drivers | runtime-and-sandbox.md |
-| SBX-04 | Select the docker driver | [Pl·c0005] | sandbox-runtime · Selectable drivers | runtime-and-sandbox.md |
-| SBX-05 | Add a driver without changing callers | [Pl·c0005] | sandbox-runtime · Selectable drivers | runtime-and-sandbox.md |
-| SBX-06 | Isolation between runs | [Pl·c0005] | sandbox-runtime · One agent per sandbox | runtime-and-sandbox.md |
-| SBX-07 | Sandbox torn down after the run | [Pl·c0005] | sandbox-runtime · One agent per sandbox | runtime-and-sandbox.md |
-| SBX-08 | Docker driver confines host paths | [Pl·c0005] | sandbox-runtime · Isolation and resource limits | runtime-and-sandbox.md |
-| SBX-09 | Resource limit terminates a runaway agent | [Pl·c0005] | sandbox-runtime · Isolation and resource limits | runtime-and-sandbox.md |
+| BUS-01 | Publish to a topic with subscribers | [Pl·c0003] | message-bus · Topic-based publish | api-reference.md |
+| BUS-02 | Publish with no subscribers is retained | [Pl·c0003] | message-bus · Topic-based publish | architecture.md |
+| BUS-03 | Receive a pushed event | [Pl·c0003] | message-bus · SSE subscription contract | api-reference.md |
+| BUS-04 | Multiple topics on one stream | [Pl·c0003] | message-bus · SSE subscription contract | architecture.md |
+| BUS-05 | Resume after a dropped connection | [Pl·c0003] | message-bus · Resumable delivery | architecture.md |
+| BUS-06 | Ack marks a message handled | [Pl·c0003] | message-bus · Delivery acknowledgement | api-reference.md |
+| BUS-07 | Unacked message is redeliverable | [Pl·c0003] | message-bus · Delivery acknowledgement | architecture.md |
+| BUS-08 | Subscriber restricted to entitled topics | [Pl·c0003] | message-bus · SSE subscription contract | auth-and-secrets.md |
+| BUS-09 | Swap backend without breaking clients | [Pl·c0003] | message-bus · Pluggable broker backend | architecture.md |
+| BUS-10 | State tracked independently of transport | [Pl·c0003] | c0002 job-queue (MODIFIED) · Transactional state machine | architecture.md |
+| BUS-11 | Distinct events publish distinct messages | [Pl·c0003] | c0002 webhook (MODIFIED) · Idempotent enqueue | architecture.md |
+| CAT-01 | Publish a new agent version | [Pl·c0004] | agent-catalog · Versioned agent artifacts | api-reference.md |
+| CAT-02 | Republishing an existing version rejected | [Pl·c0004] | agent-catalog · Versioned agent artifacts | api-reference.md |
+| CAT-03 | Resolve a moving pointer (@latest) | [Pl·c0004] | agent-catalog · Versioned agent artifacts | api-reference.md |
+| CAT-04 | Pull a definition-form agent | [Pl·c0004] | agent-catalog · Type-agnostic artifact form | api-reference.md |
+| CAT-05 | Pull an image-form agent | [Pl·c0004] | agent-catalog · Type-agnostic artifact form | runtime-and-sandbox.md |
+| CAT-06 | Authorized pull succeeds | [Pl·c0004] | agent-catalog · Pull an agent | api-reference.md |
+| CAT-07 | Unauthorized pull is denied | [Pl·c0004] | agent-catalog · Pull an agent | auth-and-secrets.md |
+| CAT-08 | Dispatch reaches the target runner | [Pl·c0004] | agent-catalog · Dispatch an agent to a target | api-reference.md |
+| CAT-09 | Dispatch carries an explicit scoped grant | [Pl·c0004] | agent-catalog · Scoped permission grants | auth-and-secrets.md |
+| CAT-10 | Absent grant denies a privileged operation | [Pl·c0004] | agent-catalog · Scoped permission grants | philosophy.md |
+| LOOP-01 | Runner comes online (presence) | [Pl·c0005] | agent-runner · SSE subscription and presence | runtime-and-sandbox.md |
+| LOOP-02 | No interval polling when idle | [Pl·c0005] | c0004 daemon (MODIFIED) · Stateless poll worker | runtime-and-sandbox.md |
+| LOOP-03 | Receive a dispatch by push | [Pl·c0005] | agent-runner · SSE subscription and presence | architecture.md |
+| LOOP-04 | Successful dispatch lifecycle | [Pl·c0005] | agent-runner · Pull-run-report loop | runtime-and-sandbox.md |
+| LOOP-05 | Failed run reported, not dropped | [Pl·c0005] | agent-runner · Pull-run-report loop | runtime-and-sandbox.md |
+| LOOP-06 | Operation within the grant proceeds | [Pl·c0005] | agent-runner · Grant enforcement on the client | philosophy.md |
+| LOOP-07 | Operation outside the grant refused locally | [Pl·c0005] | agent-runner · Grant enforcement on the client | auth-and-secrets.md |
+| SBX-01 | Run an agent through the driver interface | [Pl·c0006] | sandbox-runtime · Sandbox driver interface | runtime-and-sandbox.md |
+| SBX-02 | Prompt never placed on the command line | [Pl·c0006] | sandbox-runtime · Sandbox driver interface | philosophy.md |
+| SBX-03 | Select the local driver | [Pl·c0006] | sandbox-runtime · Selectable drivers | runtime-and-sandbox.md |
+| SBX-04 | Select the docker driver | [Pl·c0006] | sandbox-runtime · Selectable drivers | runtime-and-sandbox.md |
+| SBX-05 | Add a driver without changing callers | [Pl·c0006] | sandbox-runtime · Selectable drivers | runtime-and-sandbox.md |
+| SBX-06 | Isolation between runs | [Pl·c0006] | sandbox-runtime · One agent per sandbox | runtime-and-sandbox.md |
+| SBX-07 | Sandbox torn down after the run | [Pl·c0006] | sandbox-runtime · One agent per sandbox | runtime-and-sandbox.md |
+| SBX-08 | Docker driver confines host paths | [Pl·c0006] | sandbox-runtime · Isolation and resource limits | runtime-and-sandbox.md |
+| SBX-09 | Resource limit terminates a runaway agent | [Pl·c0006] | sandbox-runtime · Isolation and resource limits | runtime-and-sandbox.md |
 | WB-01 | Post the result back to the provider | [Impl] | rest-writeback · Server-side REST write-back | api-reference.md |
 | WB-02 | Runner holds no write-back credentials | [Impl] | rest-writeback · Server-side REST write-back | philosophy.md |
 | WB-03 | Retry after a transient failure | [Impl] | rest-writeback · Durable outbox delivery | api-reference.md |
@@ -140,35 +140,35 @@ scenarios beyond the markdown above. All skip pending their change.
 
 | ID | Title | Status | Surface |
 |----|-------|--------|---------|
-| BUS-12 | Smart subscription delivers only matching events | [Pl·c0002] | bus · smart/filtered subscription |
-| BUS-13 | Non-matching events are not materialized (lazy) | [Pl·c0002] | bus · lazy delivery |
-| BUS-14 | Push a control message down to a running sandbox | [Pl·c0002] | bus · push-to-sandbox |
-| BUS-15 | Session control channels are isolated | [Pl·c0002] | bus · session control |
-| BUS-16 | Slow subscriber does not stall the bus | [Pl·c0002] | bus · backpressure |
-| TENANT-01 | Register an isolated tenant | [Pl·c0004] | registry · tenant management |
-| TENANT-02 | Tenants are isolated from each other | [Pl·c0004] | registry · tenant isolation |
-| TENANT-03 | Registration tokens are scoped to a tenant | [Pl·c0004] | registry · token scope |
-| GRANT-01 | A tampered grant fails integrity verification | [Pl·c0003] | auth · grant integrity |
-| GRANT-02 | Absent grant denies by default | [Pl·c0003] | auth · least-privilege |
-| GRANT-03 | Grants are scoped per run, not per identity | [Pl·c0003] | auth · per-run scope |
-| AGENT-01 | Backend detection order (claude→codex→opencode) | [Pl·c0005] | agent · detection |
-| AGENT-02 | Claude Code backend runs an agent | [Pl·c0005] | agent · claude |
-| AGENT-03 | Codex backend runs an agent | [Pl·c0005] | agent · codex |
-| AGENT-04 | Backends receive the prompt over stdin | [Pl·c0005] | agent · stdin |
-| AGENT-05 | No installed backend is handled | [Pl·c0005] | agent · unavailable |
-| LOOP-08 | Reconnect with jittered backoff and resume | [Pl·c0004] | runner · resume |
-| LOOP-09 | Runner restarts and recovers in-flight bookkeeping | [Pl·c0004] | runner · crash recovery |
-| SBX-10 | Pull an image-form agent into a sandbox | [Pl·c0005] | sandbox · pull |
-| SBX-11 | Inspect a running sandbox's state | [Pl·c0005] | sandbox · manage |
-| CRASH-01 | A crashed sandbox is reported failed | [Pl·c0005] | sandbox · crash |
-| CRASH-02 | Resources are released after a crash | [Pl·c0005] | sandbox · crash cleanup |
-| CRASH-03 | Runner survives a sandbox crash and keeps serving | [Pl·c0005] | runner · crash isolation |
-| CONC-01 | Concurrent dispatches to one runner are all delivered | [Pl·c0004] | concurrency · dispatch |
-| CONC-02 | A runner runs one agent at a time | [Pl·c0004] | concurrency · one-active |
-| CONC-03 | Concurrent sandboxes do not interfere | [Pl·c0005] | concurrency · isolation |
-| CONC-04 | Per-topic delivery is ordered under concurrent publish | [Pl·c0002] | concurrency · ordering |
-| CONC-05 | Concurrent sessions never cross-deliver | [Pl·c0002] | concurrency · isolation |
-| E2E-05 | Multi-tenant concurrent journeys stay isolated | [Pl·target] | journey · multi-tenant |
+| BUS-12 | Smart subscription delivers only matching events | [Pl·c0003] | bus · smart/filtered subscription |
+| BUS-13 | Non-matching events are not materialized (lazy) | [Pl·c0003] | bus · lazy delivery |
+| BUS-14 | Push a control message down to a running sandbox | [Pl·c0003] | bus · push-to-sandbox |
+| BUS-15 | Session control channels are isolated | [Pl·c0003] | bus · session control |
+| BUS-16 | Slow subscriber does not stall the bus | [Pl·c0003] | bus · backpressure |
+| TENANT-01 | Register an isolated tenant | [Pl·c0005] | registry · tenant management |
+| TENANT-02 | Tenants are isolated from each other | [Pl·c0005] | registry · tenant isolation |
+| TENANT-03 | Registration tokens are scoped to a tenant | [Pl·c0005] | registry · token scope |
+| GRANT-01 | A tampered grant fails integrity verification | [Pl·c0004] | auth · grant integrity |
+| GRANT-02 | Absent grant denies by default | [Pl·c0004] | auth · least-privilege |
+| GRANT-03 | Grants are scoped per run, not per identity | [Pl·c0004] | auth · per-run scope |
+| AGENT-01 | Backend detection order (claude→codex→opencode) | [Pl·c0006] | agent · detection |
+| AGENT-02 | Claude Code backend runs an agent | [Pl·c0006] | agent · claude |
+| AGENT-03 | Codex backend runs an agent | [Pl·c0006] | agent · codex |
+| AGENT-04 | Backends receive the prompt over stdin | [Pl·c0006] | agent · stdin |
+| AGENT-05 | No installed backend is handled | [Pl·c0006] | agent · unavailable |
+| LOOP-08 | Reconnect with jittered backoff and resume | [Pl·c0005] | runner · resume |
+| LOOP-09 | Runner restarts and recovers in-flight bookkeeping | [Pl·c0005] | runner · crash recovery |
+| SBX-10 | Pull an image-form agent into a sandbox | [Pl·c0006] | sandbox · pull |
+| SBX-11 | Inspect a running sandbox's state | [Pl·c0006] | sandbox · manage |
+| CRASH-01 | A crashed sandbox is reported failed | [Pl·c0006] | sandbox · crash |
+| CRASH-02 | Resources are released after a crash | [Pl·c0006] | sandbox · crash cleanup |
+| CRASH-03 | Runner survives a sandbox crash and keeps serving | [Pl·c0006] | runner · crash isolation |
+| CONC-01 | Concurrent dispatches to one runner are all delivered | [Pl·c0005] | concurrency · dispatch |
+| CONC-02 | A runner runs one agent at a time | [Pl·c0005] | concurrency · one-active |
+| CONC-03 | Concurrent sandboxes do not interfere | [Pl·c0006] | concurrency · isolation |
+| CONC-04 | Per-topic delivery is ordered under concurrent publish | [Pl·c0003] | concurrency · ordering |
+| CONC-05 | Concurrent sessions never cross-deliver | [Pl·c0003] | concurrency · isolation |
+| E2E-05 | Multi-tenant concurrent journeys stay isolated | [Impl] | journey · multi-tenant |
 
 ## Real-world platform surfaces (Go suite, proposed — all skipped)
 

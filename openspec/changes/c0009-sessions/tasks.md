@@ -28,5 +28,5 @@
 ## 6. Validate
 
 - [ ] 6.1 Tests covering create→attach→close, list (status+owner), resume, multi-session isolation, idle reaping, ownership, tenant isolation
-- [ ] 6.2 `openspec validate c0008-sessions --type change --strict`
+- [ ] 6.2 `openspec validate c0009-sessions --type change --strict`
 - [ ] 6.3 e2e pointer: flip `tests/e2e/16_sessions_test.go` from Skip to Green for SESSION-01..07 (create→attach→close, list/status/owner, resume-after-reconnect, multi-session-per-runner, idle timeout, ownership, tenant isolation). Cross-references: `tests/e2e/10_runner_loop_test.go` LOOP-04/05 exercise the dispatch→run lifecycle that creates a session; `tests/e2e/17_chat_test.go` CHAT-04 (concurrent isolation) and `tests/e2e/14_concurrency_test.go` CONC-05 (concurrent sessions never cross-deliver) depend on per-session isolation.

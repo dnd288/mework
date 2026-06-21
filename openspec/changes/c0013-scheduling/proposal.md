@@ -31,7 +31,7 @@ a missed-fire policy, and per-tenant listing.
   `TZ`, so the same expression fires at the local wall-clock time of its zone.
 - **Per-tenant listing and isolation**: `List` enumerates only the calling
   tenant's schedules; there is no cross-tenant visibility.
-- Depends on `c0003-agent-catalog`: firing a schedule **dispatches** the
+- Depends on `c0004-agent-catalog`: firing a schedule **dispatches** the
   configured agent version to the target runner with its grant, reusing the
   catalog's dispatch path.
 
@@ -46,7 +46,7 @@ a missed-fire policy, and per-tenant listing.
 
 ## Impact
 
-- **Depends on `c0003-agent-catalog`**: a schedule fires by dispatching the
+- **Depends on `c0004-agent-catalog`**: a schedule fires by dispatching the
   configured agent version (with its grant) to the target runner via the catalog's
   dispatch path; the scheduler is a producer of dispatches, not a new runner.
 - Module home is `server/scheduler`; the `Scheduler`, `ScheduleSpec`,

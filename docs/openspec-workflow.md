@@ -36,11 +36,11 @@ zero-padded sequence number that encodes **apply/dependency order**. Lower numbe
 land first.
 
 ```
-openspec/changes/c0001-repo-restructure/
-openspec/changes/c0002-message-bus/
-openspec/changes/c0003-agent-catalog/
-openspec/changes/c0004-agent-runner/
-openspec/changes/c0005-sandbox-runtime/
+openspec/changes/c0002-repo-restructure/
+openspec/changes/c0003-message-bus/
+openspec/changes/c0004-agent-catalog/
+openspec/changes/c0005-agent-runner/
+openspec/changes/c0006-sandbox-runtime/
 ```
 
 > **Why the leading `c`?** OpenSpec **requires a change name to start with a

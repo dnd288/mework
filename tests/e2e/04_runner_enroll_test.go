@@ -167,7 +167,7 @@ func TestTENANT_03_RegistrationTokenScopedToTenant(t *testing.T) {
 }
 
 func TestENROLL_01_EnrollNewRunner(t *testing.T) {
-	Scenario(t, "ENROLL-01", "Enroll a new runner", PlannedC0004).
+	Scenario(t, "ENROLL-01", "Enroll a new runner", PlannedC0005).
 		Given("a valid registration token and the hub URL", func(w *World) {
 			tok, _ := w.Registry.IssueRegistrationToken(ctx(), "acme")
 			w.set("tok", tok)
@@ -185,7 +185,7 @@ func TestENROLL_01_EnrollNewRunner(t *testing.T) {
 }
 
 func TestENROLL_02_UnattendedAfterEnrollment(t *testing.T) {
-	Scenario(t, "ENROLL-02", "Unattended after enrollment", PlannedC0004).
+	Scenario(t, "ENROLL-02", "Unattended after enrollment", PlannedC0005).
 		Given("an enrolled runner", func(w *World) {}).
 		When("the runner process restarts", func(w *World) {
 			w.expect(w.StartRunner() == nil, "runner restarts using its persisted identity")
@@ -197,7 +197,7 @@ func TestENROLL_02_UnattendedAfterEnrollment(t *testing.T) {
 }
 
 func TestENROLL_03_InvalidTokenRejected(t *testing.T) {
-	Scenario(t, "ENROLL-03", "Invalid or expired registration token is rejected", PlannedC0004).
+	Scenario(t, "ENROLL-03", "Invalid or expired registration token is rejected", PlannedC0005).
 		Given("an invalid or already-used registration token", func(w *World) {}).
 		When("the developer runs `mework runner enroll`", func(w *World) {
 			_, err := w.Registry.EnrollRunner(ctx(), "bad-token")
@@ -210,7 +210,7 @@ func TestENROLL_03_InvalidTokenRejected(t *testing.T) {
 }
 
 func TestENROLL_04_RegTokenNotReusableAsIdentity(t *testing.T) {
-	Scenario(t, "ENROLL-04", "Registration token is not reusable as the identity", PlannedC0004).
+	Scenario(t, "ENROLL-04", "Registration token is not reusable as the identity", PlannedC0005).
 		Given("a registration token that successfully enrolled a runner", func(w *World) {}).
 		When("the same registration token is presented to a transport route", func(w *World) {
 			_, err := w.Auth.AuthRunner(ctx(), "the-registration-token")
@@ -223,7 +223,7 @@ func TestENROLL_04_RegTokenNotReusableAsIdentity(t *testing.T) {
 }
 
 func TestENROLL_05_InspectAgentsAndSessions(t *testing.T) {
-	Scenario(t, "ENROLL-05", "Inspect dispatched agents and active sessions", PlannedC0004).
+	Scenario(t, "ENROLL-05", "Inspect dispatched agents and active sessions", PlannedC0005).
 		Given("an enrolled runner with one or more active sessions", func(w *World) {}).
 		When("the developer runs `mework agent list --json` and `mework session list --json`", func(w *World) {
 			out, err := w.RunCLI("session", "list", "--json")

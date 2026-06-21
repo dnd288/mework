@@ -34,7 +34,7 @@ an isolated runtime, one agent per sandbox.
 
 ## Impact
 
-- **Sequenced after `c0001-repo-restructure`** (and `c0004-agent-runner`): execution moves to
+- **Sequenced after `c0002-repo-restructure`** (and `c0005-agent-runner`): execution moves to
   `sandbox/runtime` (was `sandbox/engine/local`), with one subpackage per
   driver (`sandbox/engine/local`, `sandbox/engine/docker`, …).
 - Affected code: `sandbox/engine/*` (driver interface + drivers), the

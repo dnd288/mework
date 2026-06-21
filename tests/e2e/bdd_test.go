@@ -1,6 +1,6 @@
 // Package e2e is the executable BDD scenario catalog for MeWork. Each scenario reads as
 // GIVEN/WHEN/THEN and is SKIPPED — the agent-hub target it exercises is not implemented
-// yet (openspec/changes/c0001..c0005), and the implemented baseline keeps its own real
+// yet (openspec/changes/c0002..c0006), and the implemented baseline keeps its own real
 // tests elsewhere. These exist so the BEHAVIORS and the proposed API can be reviewed and
 // evaluated in real Go before anything is built. See SCENARIOS.md for the index.
 //
@@ -16,10 +16,10 @@ import "testing"
 // planned under a specific change. Planned scenarios skip with their change id.
 const (
 	Implemented  = "implemented (baseline; see internal/... real tests)"
-	PlannedC0002 = "pending c0002 — message-bus"
-	PlannedC0003 = "pending c0003 — agent-catalog"
-	PlannedC0004 = "pending c0004 — agent-runner"
-	PlannedC0005 = "pending c0005 — sandbox-runtime"
+	PlannedC0003 = "pending c0003 — message-bus"
+	PlannedC0004 = "pending c0004 — agent-catalog"
+	PlannedC0005 = "pending c0005 — agent-runner"
+	PlannedC0006 = "pending c0006 — sandbox-runtime"
 	PlannedTgt   = "pending — full agent-hub target"
 	// PlannedPlatform marks real-world platform capabilities (scheduling, sessions,
 	// chat, streaming, quotas, audit, notifications, artifacts) not yet captured by a

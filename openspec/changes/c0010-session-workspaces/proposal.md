@@ -16,7 +16,7 @@ archive, or copy a store template) and **lifecycle hooks** (init / pre_run /
 post_run / pre_sync / post_sync) that the sandbox runs around the agent.
 
 The agent never holds raw store credentials: sync goes through the object store's
-presigned / hub-proxied path established by `c0007-object-storage`.
+presigned / hub-proxied path established by `c0008-object-storage`.
 
 ## What Changes
 
@@ -47,11 +47,11 @@ presigned / hub-proxied path established by `c0007-object-storage`.
 
 ## Impact
 
-- **Depends on `c0007-object-storage`**: workspaces sync to the `ObjectStore` port
+- **Depends on `c0008-object-storage`**: workspaces sync to the `ObjectStore` port
   and use its presigned / hub-proxied path so store credentials stay server-side.
-- **Depends on `c0008-sessions`**: workspaces are attached to a session and are
+- **Depends on `c0009-sessions`**: workspaces are attached to a session and are
   isolated per session.
-- **Depends on `c0005-sandbox-runtime`**: the sandbox driver provides Mount,
+- **Depends on `c0006-sandbox-runtime`**: the sandbox driver provides Mount,
   Bootstrap, and RunHooks and preserves the stdin-not-argv invariant for hooks.
 - New module homes: `client/workspacefs`, `server/storage` (`WorkspaceManager` +
   sync), and the `sandbox` runtime's Mount/Bootstrap/RunHooks.

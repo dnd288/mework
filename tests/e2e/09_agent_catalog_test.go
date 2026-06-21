@@ -6,7 +6,7 @@ import "testing"
 // Spec: openspec/changes/c0003-agent-catalog. Skips pending c0003.
 
 func TestCAT_01_PublishNewVersion(t *testing.T) {
-	Scenario(t, "CAT-01", "Publish a new agent version", PlannedC0003).
+	Scenario(t, "CAT-01", "Publish a new agent version", PlannedC0004).
 		Given("an authenticated operator", func(w *World) {}).
 		When("the operator publishes code-fixer@1.2.0", func(w *World) {
 			v, err := w.Catalog.PublishVersion(ctx(), Identity{Tenant: "t1"}, "code-fixer", "1.2.0", FormDefinition, []byte("manifest"))
@@ -21,7 +21,7 @@ func TestCAT_01_PublishNewVersion(t *testing.T) {
 }
 
 func TestCAT_02_RepublishRejected(t *testing.T) {
-	Scenario(t, "CAT-02", "Republishing an existing version is rejected", PlannedC0003).
+	Scenario(t, "CAT-02", "Republishing an existing version is rejected", PlannedC0004).
 		Given("code-fixer@1.2.0 already exists", func(w *World) {
 			_, _ = w.Catalog.PublishVersion(ctx(), Identity{}, "code-fixer", "1.2.0", FormDefinition, []byte("a"))
 		}).
@@ -36,7 +36,7 @@ func TestCAT_02_RepublishRejected(t *testing.T) {
 }
 
 func TestCAT_03_ResolveMovingPointer(t *testing.T) {
-	Scenario(t, "CAT-03", "Resolve a moving pointer (@latest)", PlannedC0003).
+	Scenario(t, "CAT-03", "Resolve a moving pointer (@latest)", PlannedC0004).
 		Given("several published versions of code-fixer", func(w *World) {}).
 		When("a client resolves code-fixer@latest", func(w *World) {
 			v, err := w.Catalog.Resolve(ctx(), AgentRef{Name: "code-fixer", Version: "latest"})
@@ -51,7 +51,7 @@ func TestCAT_03_ResolveMovingPointer(t *testing.T) {
 }
 
 func TestCAT_04_PullDefinitionForm(t *testing.T) {
-	Scenario(t, "CAT-04", "Pull a definition-form agent", PlannedC0003).
+	Scenario(t, "CAT-04", "Pull a definition-form agent", PlannedC0004).
 		Given("code-fixer@1.2.0 published with form=definition", func(w *World) {}).
 		When("an authorized runner pulls it", func(w *World) {
 			art, err := w.Catalog.Pull(ctx(), AgentRef{Name: "code-fixer", Version: "1.2.0"}, Identity{Runner: "R"}, grant(OpPullAgent))
@@ -66,7 +66,7 @@ func TestCAT_04_PullDefinitionForm(t *testing.T) {
 }
 
 func TestCAT_05_PullImageForm(t *testing.T) {
-	Scenario(t, "CAT-05", "Pull an image-form agent", PlannedC0003).
+	Scenario(t, "CAT-05", "Pull an image-form agent", PlannedC0004).
 		Given("an agent version published with form=image", func(w *World) {}).
 		When("an authorized runner pulls it", func(w *World) {
 			art, _ := w.Catalog.Pull(ctx(), AgentRef{Name: "img", Version: "1.0.0"}, Identity{Runner: "R"}, grant(OpPullAgent))
@@ -80,7 +80,7 @@ func TestCAT_05_PullImageForm(t *testing.T) {
 }
 
 func TestCAT_06_AuthorizedPullSucceeds(t *testing.T) {
-	Scenario(t, "CAT-06", "Authorized pull succeeds", PlannedC0003).
+	Scenario(t, "CAT-06", "Authorized pull succeeds", PlannedC0004).
 		Given("an enrolled runner with a valid grant for the dispatched version", func(w *World) {}).
 		When("it pulls code-fixer@1.2.0", func(w *World) {
 			_, err := w.Catalog.Pull(ctx(), AgentRef{Name: "code-fixer", Version: "1.2.0"}, Identity{Runner: "R"}, grant(OpPullAgent))
@@ -93,7 +93,7 @@ func TestCAT_06_AuthorizedPullSucceeds(t *testing.T) {
 }
 
 func TestCAT_07_UnauthorizedPullDenied(t *testing.T) {
-	Scenario(t, "CAT-07", "Unauthorized pull is denied", PlannedC0003).
+	Scenario(t, "CAT-07", "Unauthorized pull is denied", PlannedC0004).
 		Given("a caller without a valid grant for the version", func(w *World) {}).
 		When("it attempts to pull", func(w *World) {
 			_, err := w.Catalog.Pull(ctx(), AgentRef{Name: "code-fixer", Version: "1.2.0"}, Identity{Runner: "R"}, grant())
@@ -106,7 +106,7 @@ func TestCAT_07_UnauthorizedPullDenied(t *testing.T) {
 }
 
 func TestCAT_08_DispatchReachesTargetRunner(t *testing.T) {
-	Scenario(t, "CAT-08", "Dispatch reaches the target runner", PlannedC0003).
+	Scenario(t, "CAT-08", "Dispatch reaches the target runner", PlannedC0004).
 		Given("runner R is subscribed to runner.R.dispatch", func(w *World) {
 			w.Session = w.OpenSession("R", Filter{Topics: []Topic{"runner.R.dispatch"}})
 		}).
@@ -122,7 +122,7 @@ func TestCAT_08_DispatchReachesTargetRunner(t *testing.T) {
 }
 
 func TestCAT_09_DispatchCarriesScopedGrant(t *testing.T) {
-	Scenario(t, "CAT-09", "Dispatch carries an explicit scoped grant", PlannedC0003).
+	Scenario(t, "CAT-09", "Dispatch carries an explicit scoped grant", PlannedC0004).
 		Given("a dispatch whose grant permits only repo.read and agent.pull", func(w *World) {
 			w.Grant = grant(OpRepoRead, OpPullAgent)
 		}).
@@ -135,7 +135,7 @@ func TestCAT_09_DispatchCarriesScopedGrant(t *testing.T) {
 }
 
 func TestCAT_10_AbsentGrantDeniesOperation(t *testing.T) {
-	Scenario(t, "CAT-10", "Absent grant denies a privileged operation", PlannedC0003).
+	Scenario(t, "CAT-10", "Absent grant denies a privileged operation", PlannedC0004).
 		Given("a dispatch without a grant for repo.write", func(w *World) {
 			w.Grant = grant(OpRepoRead)
 		}).

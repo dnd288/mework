@@ -1,6 +1,6 @@
 ## Context
 
-A session (`c0008-sessions`) binds an operator to a single running agent and
+A session (`c0009-sessions`) binds an operator to a single running agent and
 already exposes attach + live status. The message bus (`c0002-message-bus`) already
 delivers server→client events as a resumable, topic-addressed SSE stream with
 per-client backpressure. Interactive chat sits exactly between these two: it is
@@ -21,7 +21,7 @@ interface: `Send`, `Stream`, `History`, `Cancel`.
 - Mid-turn cancel that interrupts generation and leaves the session usable.
 
 **Non-Goals:**
-- The session lifecycle itself (attach/detach/bind) — owned by `c0008-sessions`.
+- The session lifecycle itself (attach/detach/bind) — owned by `c0009-sessions`.
 - The bus transport (topics, SSE framing, resumption, ack) — owned by
   `c0002-message-bus`; chat is a producer/consumer on top of it.
 - Persisting full conversation transcripts beyond the session's retention.

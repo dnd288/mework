@@ -26,7 +26,7 @@ stream, run status is queryable at any time, and a run can be cancelled
   `shared/transport`; the emit/subscribe/status/cancel orchestration and tail
   buffer land in `server/orchestrator`. Upstream emission and cancel teardown ride
   the bus from `c0002-message-bus`; cancel reaches into the sandbox owned by the
-  runner from `c0004-agent-runner`.
+  runner from `c0005-agent-runner`.
 
 ## Capabilities
 
@@ -39,7 +39,7 @@ stream, run status is queryable at any time, and a run can be cancelled
 ## Impact
 
 - **Depends on `c0002-message-bus`** (topics/subscriptions carry upstream events
-  and cancel control) and **`c0004-agent-runner`** (the runner emits events and
+  and cancel control) and **`c0005-agent-runner`** (the runner emits events and
   owns the sandbox that cancellation tears down).
 - New code: `shared/transport` (`RunEvents`, `RunEvent`); `server/orchestrator`
   (emit/subscribe/status/cancel, recent-tail buffer, cancel propagation).

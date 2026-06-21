@@ -24,5 +24,5 @@
 ## 5. Validate
 
 - [ ] 5.1 Tests: object CRUD round-trips, prefix listing, head metadata, delete, presigned GET/PUT URLs, multipart upload, and identical behavior across the S3-family drivers
-- [ ] 5.2 `openspec validate c0007-object-storage --type change --strict`
+- [ ] 5.2 `openspec validate c0008-object-storage --type change --strict`
 - [ ] 5.3 e2e pointer: flip `tests/e2e/23_workspace_storage_test.go` from Skip to Green for STORE-01..07 (S3-compatible put/get, list-by-prefix, head, delete, presigned GET/PUT, endpoint-agnostic AWS/MinIO/R2, multipart). The same `ObjectStore` port is the dependency for WS-01..09, SHARE-01..06, and ARTIFACT-* — landing this change unblocks those.

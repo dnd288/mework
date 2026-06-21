@@ -1,6 +1,6 @@
 ## Why
 
-Sessions (`c0008-sessions`) give an operator a durable, attachable workspace bound
+Sessions (`c0009-sessions`) give an operator a durable, attachable workspace bound
 to a running agent, but attaching only exposes one-shot dispatch and live status —
 there is no way to **talk** to the agent interactively. Real work is iterative: the
 operator wants to send a message, watch the assistant's reply stream back token by
@@ -34,7 +34,7 @@ the message bus, preserving per-session history.
 
 ## Impact
 
-- **Depends on `c0008-sessions`**: a `Conversation` is opened against an attached
+- **Depends on `c0009-sessions`**: a `Conversation` is opened against an attached
   session bound to a running agent.
 - **Depends on `c0002-message-bus`**: assistant turns are **streamed** over the
   bus's topic/SSE delivery; chat does not introduce a new transport.

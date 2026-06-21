@@ -6,7 +6,7 @@ import "testing"
 // Spec: openspec/changes/c0004-agent-runner. Skips pending c0004.
 
 func TestLOOP_01_RunnerComesOnline(t *testing.T) {
-	Scenario(t, "LOOP-01", "Runner comes online (presence)", PlannedC0004).
+	Scenario(t, "LOOP-01", "Runner comes online (presence)", PlannedC0005).
 		Given("an enrolled runner R", func(w *World) {}).
 		When("R opens its SSE subscription", func(w *World) {
 			w.Session = w.OpenSession("R", Filter{Topics: []Topic{"runner.R.dispatch"}})
@@ -19,7 +19,7 @@ func TestLOOP_01_RunnerComesOnline(t *testing.T) {
 }
 
 func TestLOOP_02_NoIntervalPolling(t *testing.T) {
-	Scenario(t, "LOOP-02", "No interval polling when idle", PlannedC0004).
+	Scenario(t, "LOOP-02", "No interval polling when idle", PlannedC0005).
 		Given("R is online and idle (no dispatches)", func(w *World) {
 			w.Session = w.OpenSession("R", Filter{Topics: []Topic{"runner.R.dispatch"}})
 		}).
@@ -31,7 +31,7 @@ func TestLOOP_02_NoIntervalPolling(t *testing.T) {
 }
 
 func TestLOOP_03_ReceiveDispatchByPush(t *testing.T) {
-	Scenario(t, "LOOP-03", "Receive a dispatch by push", PlannedC0004).
+	Scenario(t, "LOOP-03", "Receive a dispatch by push", PlannedC0005).
 		Given("R is subscribed", func(w *World) {
 			w.Session = w.OpenSession("R", Filter{Topics: []Topic{"runner.R.dispatch"}})
 		}).
@@ -46,7 +46,7 @@ func TestLOOP_03_ReceiveDispatchByPush(t *testing.T) {
 }
 
 func TestLOOP_04_SuccessfulDispatchLifecycle(t *testing.T) {
-	Scenario(t, "LOOP-04", "Successful dispatch lifecycle", PlannedC0004).
+	Scenario(t, "LOOP-04", "Successful dispatch lifecycle", PlannedC0005).
 		Given("R received a dispatch for code-fixer@1.2.0", func(w *World) {}).
 		When("R processes it", func(w *World) {
 			w.expect(w.StartRunner() == nil, "runner loop should start")
@@ -58,7 +58,7 @@ func TestLOOP_04_SuccessfulDispatchLifecycle(t *testing.T) {
 }
 
 func TestLOOP_05_FailedRunReported(t *testing.T) {
-	Scenario(t, "LOOP-05", "Failed run is reported, not dropped", PlannedC0004).
+	Scenario(t, "LOOP-05", "Failed run is reported, not dropped", PlannedC0005).
 		Given("a dispatch whose agent exits non-zero", func(w *World) {
 			w.FakeAgent("claude", "exit-nonzero")
 		}).
@@ -70,7 +70,7 @@ func TestLOOP_05_FailedRunReported(t *testing.T) {
 }
 
 func TestLOOP_06_OperationWithinGrantProceeds(t *testing.T) {
-	Scenario(t, "LOOP-06", "Operation within the grant proceeds", PlannedC0004).
+	Scenario(t, "LOOP-06", "Operation within the grant proceeds", PlannedC0005).
 		Given("a dispatch whose grant covers the attempted operation", func(w *World) {
 			w.Grant = grant(OpRepoRead)
 		}).
@@ -82,7 +82,7 @@ func TestLOOP_06_OperationWithinGrantProceeds(t *testing.T) {
 }
 
 func TestLOOP_07_OperationOutsideGrantRefused(t *testing.T) {
-	Scenario(t, "LOOP-07", "Operation outside the grant is refused locally", PlannedC0004).
+	Scenario(t, "LOOP-07", "Operation outside the grant is refused locally", PlannedC0005).
 		Given("a dispatch whose grant does not cover an attempted operation", func(w *World) {
 			w.Grant = grant(OpRepoRead)
 		}).
@@ -94,7 +94,7 @@ func TestLOOP_07_OperationOutsideGrantRefused(t *testing.T) {
 }
 
 func TestLOOP_08_ReconnectResume(t *testing.T) {
-	Scenario(t, "LOOP-08", "Reconnect with jittered backoff and resume", PlannedC0004).
+	Scenario(t, "LOOP-08", "Reconnect with jittered backoff and resume", PlannedC0005).
 		Given("R's SSE connection dropped after processing event id 7", func(w *World) {
 			w.set("lastID", "7")
 		}).
@@ -111,7 +111,7 @@ func TestLOOP_08_ReconnectResume(t *testing.T) {
 }
 
 func TestLOOP_09_CrashRecovery(t *testing.T) {
-	Scenario(t, "LOOP-09", "Runner restarts and recovers in-flight bookkeeping", PlannedC0004).
+	Scenario(t, "LOOP-09", "Runner restarts and recovers in-flight bookkeeping", PlannedC0005).
 		Given("R crashed mid-run with one dispatch unacked", func(w *World) {}).
 		When("R restarts with its persisted runner identity", func(w *World) {
 			_, err := w.EnrollRunner("") // identity already persisted; no re-enroll needed

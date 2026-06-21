@@ -58,7 +58,7 @@ handles scenarios use.
 - **Today `[Implemented]`** — drives the job API through the typed
   `meworkclient.Client` (`Claim` / `Ack` / `Heartbeat`), the way `pipeline_test.go`
   stands in for the daemon.
-- **Target `[Planned — c0004]`** — an SSE consumer that holds a `text/event-stream`
+- **Target `[Planned — c0005]`** — an SSE consumer that holds a `text/event-stream`
   connection, reads events with monotonic `id`, reconnects with `Last-Event-ID`, POSTs
   acks out-of-band, and pulls dispatched agent versions. Authenticated with a runner
   identity credential, not `rt_token`.

@@ -38,7 +38,7 @@ and clients **subscribe over Server-Sent Events (SSE)**. It is the foundation th
 
 ## Impact
 
-- **Sequenced after `c0001-repo-restructure`** — builds on the new layout: the SSE
+- **Sequenced after `c0002-repo-restructure`** — builds on the new layout: the SSE
   event schema/DTOs live in `shared/transport`; server code in
   `server/{hub,bus,webhook}`; client code in `client/subscribe`.
 - New server routes: `GET /api/v1/.../subscribe` (SSE) and a publish/ack path.

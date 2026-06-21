@@ -37,7 +37,7 @@ When ready to implement, run /opsx:apply
 
    This project names every change directory `cNNNN-<kebab-slug>`, where `NNNN` is a
    4-digit, zero-padded sequence number encoding apply/dependency order (e.g.
-   `c0001-repo-restructure`, `c0002-message-bus`). The leading `c` is required:
+   `c0002-repo-restructure`, `c0002-message-bus`). The leading `c` is required:
    OpenSpec rejects change names that start with a digit (`openspec new change`,
    `status --change`, and `instructions --change` all enforce a leading letter).
    Compute the next number:

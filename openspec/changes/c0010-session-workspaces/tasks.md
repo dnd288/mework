@@ -41,5 +41,5 @@
 
 ## 7. Validate
 
-- [ ] 7.1 openspec validate c0009-session-workspaces --type change --strict
+- [ ] 7.1 openspec validate c0010-session-workspaces --type change --strict
 - [ ] 7.2 e2e pointer: flip `tests/e2e/23_workspace_storage_test.go` from Skip to Green for WS-01..09 (folder→rw mount, sandbox writes a real file, sync-to-remote, detach-flush, force-sync+status, re-attach restores from remote, per-session isolation, write-outside-prefix denied, agent never holds store creds via presigned URLs) and SHARE-01..06 (shared root read-all, shared root read-only, push only the grant-allowed folder, push-outside denied, published folder readable by other sessions, grant scopes read(broad)/write/push(narrow)); flip `tests/e2e/24_workspace_hooks_test.go` from Skip to Green for WSHOOK-01..08 (base code + lifecycle hooks: init clones git, setup installs deps, pre_run/post_run bracket the agent, failing init aborts the run, hooks within grant scope, post_sync after remote push, base from archive/store template, hook scripts over stdin not argv).

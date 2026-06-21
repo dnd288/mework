@@ -1,8 +1,8 @@
 ## Context
 
-The redesign runs agents in isolated sandboxes (`c0005-sandbox-runtime`) for
-sessions (`c0008-sessions`), backed by an S3-compatible object store
-(`c0007-object-storage`). What is still missing is a durable, shareable **working
+The redesign runs agents in isolated sandboxes (`c0006-sandbox-runtime`) for
+sessions (`c0009-sessions`), backed by an S3-compatible object store
+(`c0008-object-storage`). What is still missing is a durable, shareable **working
 directory** for a run. Each agent currently works in an ephemeral host folder that
 is destroyed with the sandbox: nothing persists the files, nothing lets a new
 sandbox resume the same session's work, and there is no controlled channel for one
@@ -26,10 +26,10 @@ mount, bootstrap, and hook execution primitives.
 - The agent never holds raw store credentials.
 
 **Non-Goals:**
-- The object-store port and its drivers (owned by `c0007-object-storage`).
-- Session identity / lifecycle (owned by `c0008-sessions`).
+- The object-store port and its drivers (owned by `c0008-object-storage`).
+- Session identity / lifecycle (owned by `c0009-sessions`).
 - Sandbox isolation mechanics and driver selection (owned by
-  `c0005-sandbox-runtime`); this change only consumes Mount/Bootstrap/RunHooks.
+  `c0006-sandbox-runtime`); this change only consumes Mount/Bootstrap/RunHooks.
 - Grant issuance / authorization policy (owned by the runner/catalog changes); this
   change consumes the `workspace.read` / `workspace.write` / `workspace.push`
   operations.

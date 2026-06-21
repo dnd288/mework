@@ -19,10 +19,10 @@
 
 ## 3. Wire the controls into the dispatch / enrollment / grant paths
 
-- [ ] 3.1 In `c0003-agent-catalog` dispatch handler, call `Quota.Allow` before enqueuing; on rejection return a typed error the HTTP layer maps to 429.
-- [ ] 3.2 In `c0003-agent-catalog` dispatch handler, call `AuditLog.Record` with action `dispatch.run`.
-- [ ] 3.3 In `c0003-agent-catalog` grant issuance, call `AuditLog.Record` with action `grant.issue`.
-- [ ] 3.4 In `c0004-agent-runner` enrollment handler, call `AuditLog.Record` with action `runner.enroll`.
+- [ ] 3.1 In `c0004-agent-catalog` dispatch handler, call `Quota.Allow` before enqueuing; on rejection return a typed error the HTTP layer maps to 429.
+- [ ] 3.2 In `c0004-agent-catalog` dispatch handler, call `AuditLog.Record` with action `dispatch.run`.
+- [ ] 3.3 In `c0004-agent-catalog` grant issuance, call `AuditLog.Record` with action `grant.issue`.
+- [ ] 3.4 In `c0005-agent-runner` enrollment handler, call `AuditLog.Record` with action `runner.enroll`.
 
 ## 4. Validate
 

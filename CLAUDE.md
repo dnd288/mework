@@ -206,7 +206,7 @@ model to an **agent hub** with a GitHub-Actions-runner DX — install a runner o
 then **subscribe over SSE**, **pull** versioned agents from a catalog, run them in
 **pluggable sandboxes** (`local`/`docker`/…), all under scoped permission grants.
 It is captured as five OpenSpec changes under `openspec/changes/`
-(`c0001-repo-restructure` … `c0005-sandbox-runtime`) and described in
+(`c0002-repo-restructure` … `c0005-sandbox-runtime`) and described in
 [docs/architecture.md](docs/architecture.md). **The code still
 implements the current poll/queue model** — do not assume the redesign exists when
 working in the repo.

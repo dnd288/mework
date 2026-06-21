@@ -16,9 +16,9 @@
 | **`rt_token`** `[Implemented]` | the daemon | `/api/v1/jobs/*` | plaintext once at creation; only an HMAC hash stored server-side |
 | **provider webhook secret** | the server (DB) | `/webhooks/{provider}` signature | stored per connection |
 | **sealed provider token** | the server (DB) | write-back to the provider | AES-256-GCM at rest, unsealed only at write time |
-| **registration token** `[Planned — c0004]` | the operator → runner | one-time runner enrollment | short-lived, single-use |
-| **runner identity** `[Planned — c0004]` | the runner | SSE subscribe / ack / pull | durable, `~/.mework/` `0600` |
-| **grant** `[Planned — c0003]` | travels with each dispatch | the operations a run may perform | signed/sealed, per-run |
+| **registration token** `[Planned — c0005]` | the operator → runner | one-time runner enrollment | short-lived, single-use |
+| **runner identity** `[Planned — c0005]` | the runner | SSE subscribe / ack / pull | durable, `~/.mework/` `0600` |
+| **grant** `[Planned — c0004]` | travels with each dispatch | the operations a run may perform | signed/sealed, per-run |
 
 ## Two-token authentication `[Implemented]`
 
@@ -62,7 +62,7 @@ prepended to the ciphertext, hex-encoded, stored in
 `provider_connections.mcp_auth_enc`. The token is **unsealed only server-side at
 write-back time** (`connectionSvc.GetDecryptedToken`) — the daemon never holds it.
 
-## Runner enrollment `[Planned — c0004]`
+## Runner enrollment `[Planned — c0005]`
 
 Replaces `runtime register` for the agent hub. Modeled on `actions/runner config`:
 
@@ -77,7 +77,7 @@ Replaces `runtime register` for the agent hub. Modeled on `actions/runner config
 Thereafter the runner authenticates the transport routes (SSE subscribe, ack, pull)
 with its durable runner identity.
 
-## The grant model `[Planned — c0003]`
+## The grant model `[Planned — c0004]`
 
 Authentication answers *who*; a **grant** answers *what this run may do*.
 

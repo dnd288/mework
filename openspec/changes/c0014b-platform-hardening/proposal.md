@@ -25,8 +25,8 @@ Introduce two small, focused ports and pin them with the e2e scenarios
 
 ## Impact
 
-- **Depends on c0007-multi-tenancy** (per-tenant target / per-tenant scoping).
-- **Depends on c0009-object-storage** for the `ObjectStore` backend that
+- **Depends on c0000-tenancy** (per-tenant target / per-tenant scoping).
+- **Depends on c0008-object-storage** for the `ObjectStore` backend that
   `ArtifactStore` persists artifacts to.
 - **Depends on c0011-run-events** (the `run.done` / `run.failed` events the notifier
   consumes).

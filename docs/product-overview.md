@@ -111,7 +111,7 @@ self-hosted runner: install a runner once, then drive everything remotely —
 3. **Sandbox** — a pluggable isolated runtime (`local`/`docker`/…), one agent per
    sandbox.
 
-Tracked as five OpenSpec changes under `openspec/changes/` (`c0001-repo-restructure`
+Tracked as five OpenSpec changes under `openspec/changes/` (`c0002-repo-restructure`
 … `c0005-sandbox-runtime`). Full design in [architecture.md](architecture.md).
 
 **Superseded** — the original MCP-based write-back (now server-side REST) and the

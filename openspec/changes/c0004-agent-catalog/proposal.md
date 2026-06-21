@@ -36,7 +36,7 @@ dispatched agent may do.
 
 ## Impact
 
-- **Sequenced after `c0001-repo-restructure`** (and `c0002-message-bus`): catalog/permission
+- **Sequenced after `c0002-repo-restructure`** (and `c0002-message-bus`): catalog/permission
   code lands in `server/{catalog,permission}`; grant/agent DTOs in
   `shared/transport`; sealing via `server/platform/secret`/`token`.
 - New server routes under `/api/v1/agents` (publish, list, resolve, pull) and a

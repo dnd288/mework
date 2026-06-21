@@ -14,7 +14,7 @@
 
 - [ ] 3.1 Evaluate cron expressions against the schedule's IANA `TZ` (timezone-aware, DST-correct)
 - [ ] 3.2 Compute the next fire for `cron`/`interval` and re-arm after each fire; complete `at` after its single fire
-- [ ] 3.3 At each fire, dispatch the configured agent version + grant to `Target` via the catalog/orchestrator (`c0003-agent-catalog`)
+- [ ] 3.3 At each fire, dispatch the configured agent version + grant to `Target` via the catalog/orchestrator (`c0004-agent-catalog`)
 - [ ] 3.4 Make fire bookkeeping idempotent per fire instant (no double-dispatch on re-arm/recovery)
 
 ## 4. Missed-fire policy

@@ -4,7 +4,7 @@ The agent-hub redesign (`docs/target-architecture.md`) introduces a live
 **Session** wire primitive on the bus (`c0002-message-bus`): a control channel
 plus `PushToSandbox`. But there is no object that *owns* a session over its
 lifetime — nothing to create, look up, list, attach to, or close. Interactive chat
-(`c0010-chat`), live status, and online-backed workspaces (`c0009-session-workspaces`)
+(`c0011-chat`), live status, and online-backed workspaces (`c0010-session-workspaces`)
 all need a durable, manageable session object. This change adds that object and its
 manager, separate from the bus primitive: the bus `Session` is the live endpoint
 `Attach` hands back, while `SessionManager` owns the lifecycle around it.
@@ -26,9 +26,9 @@ manager, separate from the bus primitive: the bus `Session` is the live endpoint
 
 - The live wire/control-channel internals (`c0002-message-bus` owns the bus
   `Session` primitive and SSE resume).
-- The dispatch/grant issuance (`c0004-agent-runner`).
-- Interactive chat semantics (`c0010-chat`) and workspace mounting
-  (`c0009-session-workspaces`) — sessions are the object those build on.
+- The dispatch/grant issuance (`c0005-agent-runner`).
+- Interactive chat semantics (`c0011-chat`) and workspace mounting
+  (`c0010-session-workspaces`) — sessions are the object those build on.
 
 ## Decisions
 

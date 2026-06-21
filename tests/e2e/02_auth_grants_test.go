@@ -164,7 +164,7 @@ func TestAUTH_08_GrantScopesOperationWithinTenant(t *testing.T) {
 }
 
 func TestGRANT_01_IntegrityVerified(t *testing.T) {
-	Scenario(t, "GRANT-01", "A tampered grant fails integrity verification", PlannedC0003).
+	Scenario(t, "GRANT-01", "A tampered grant fails integrity verification", PlannedC0004).
 		Given("a grant whose signature does not match its contents", func(w *World) {
 			w.Grant = Grant{Ops: []Operation{OpRepoWrite}, Sig: []byte("forged")}
 		}).
@@ -179,7 +179,7 @@ func TestGRANT_01_IntegrityVerified(t *testing.T) {
 }
 
 func TestGRANT_02_LeastPrivilegeDefault(t *testing.T) {
-	Scenario(t, "GRANT-02", "Absent grant denies by default", PlannedC0003).
+	Scenario(t, "GRANT-02", "Absent grant denies by default", PlannedC0004).
 		Given("a grant that lists no operations", func(w *World) {
 			w.Grant = grant()
 		}).
@@ -192,7 +192,7 @@ func TestGRANT_02_LeastPrivilegeDefault(t *testing.T) {
 }
 
 func TestGRANT_03_PerRunNotPerIdentity(t *testing.T) {
-	Scenario(t, "GRANT-03", "Grants are scoped per run, not per identity", PlannedC0003).
+	Scenario(t, "GRANT-03", "Grants are scoped per run, not per identity", PlannedC0004).
 		Given("the same runner dispatched twice with different grants", func(w *World) {}).
 		When("run A carries a broad grant and run B carries a minimal grant", func(w *World) {
 			w.set("a", grant(OpRepoRead, OpRepoWrite, OpNetwork))

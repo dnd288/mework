@@ -35,7 +35,7 @@ all without manual operation on the host.
 
 ## Impact
 
-- **Sequenced after `c0001-repo-restructure`** (and `c0002-message-bus`, `c0003-agent-catalog`):
+- **Sequenced after `c0002-repo-restructure`** (and `c0002-message-bus`, `c0004-agent-catalog`):
   runner code lands in `client/{runner,subscribe,cli}`; config in
   `shared/config`; dispatch/grant DTOs in `shared/transport`.
 - Affected code: `client/runner` (was `client/runner`),

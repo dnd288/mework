@@ -22,7 +22,7 @@ Introduce two small, focused ports and pin them with the e2e scenarios
 
 ## Impact
 
-- **Depends on c0007-multi-tenancy** (every operation is tenant-scoped).
+- **Depends on c0000-tenancy** (every operation is tenant-scoped).
 - Module homes: `server/quota` (`Quota`), `server/audit` (`AuditLog`).
 - Behaviors are pinned by `tests/e2e/20_quotas_audit_test.go`.
 

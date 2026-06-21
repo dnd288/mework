@@ -24,7 +24,7 @@ session = one live agent association/run, with an explicit lifecycle.
 - **Ownership and tenant scoping**: only the owner may attach; listings are
   tenant-scoped with no cross-tenant visibility.
 - Depends on `c0002-message-bus` (the live `Session` wire primitive that `Attach`
-  returns) and `c0004-agent-runner` (the dispatch a session is created from).
+  returns) and `c0005-agent-runner` (the dispatch a session is created from).
 
 ## Capabilities
 
@@ -37,13 +37,13 @@ session = one live agent association/run, with an explicit lifecycle.
 
 ## Impact
 
-- **Sequenced after `c0001-repo-restructure`**: session code lands in
+- **Sequenced after `c0002-repo-restructure`**: session code lands in
   `server/session`; the `SessionManager`, `SessionInfo`, and `SessionStatus`
   contract lives in `shared`.
 - Depends on `c0002-message-bus` (the live `Session` wire endpoint `Attach`
-  returns) and `c0004-agent-runner` (the `Dispatch` a session is created from).
-- Provides the base for `c0009-session-workspaces` (a session attaches an
-  online-backed workspace) and `c0010-chat` (an interactive conversation runs
+  returns) and `c0005-agent-runner` (the `Dispatch` a session is created from).
+- Provides the base for `c0010-session-workspaces` (a session attaches an
+  online-backed workspace) and `c0011-chat` (an interactive conversation runs
   inside a session).
 - Behaviors are pinned by the e2e scenarios `SESSION-01` through `SESSION-07`
   (`tests/e2e/16_sessions_test.go`), driving the `SessionManager`/`SessionInfo`

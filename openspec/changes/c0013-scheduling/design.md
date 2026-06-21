@@ -2,7 +2,7 @@
 
 An automation hub needs to run agents on a clock, not only in response to a
 ticket comment or a manual dispatch. The dispatch path already exists
-(`c0003-agent-catalog` publishes a dispatch — agent version + grant — to a target
+(`c0004-agent-catalog` publishes a dispatch — agent version + grant — to a target
 runner's topic). What is missing is a durable, time-driven producer of those
 dispatches. Because the platform is hybrid (runners come and go, may be offline at
 any moment), the scheduler must also be explicit about what happens when a fire

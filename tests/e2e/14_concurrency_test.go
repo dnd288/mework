@@ -6,7 +6,7 @@ import "testing"
 // over bus + catalog + runner + sandbox. Spec: c0002/c0004/c0005. Skips pending target.
 
 func TestCONC_01_ConcurrentDispatchToOneRunner(t *testing.T) {
-	Scenario(t, "CONC-01", "Concurrent dispatches to one runner are all delivered", PlannedC0004).
+	Scenario(t, "CONC-01", "Concurrent dispatches to one runner are all delivered", PlannedC0005).
 		Given("runner R subscribed to runner.R.dispatch", func(w *World) {
 			w.Session = w.OpenSession("R", Filter{Topics: []Topic{"runner.R.dispatch"}})
 		}).
@@ -27,7 +27,7 @@ func TestCONC_01_ConcurrentDispatchToOneRunner(t *testing.T) {
 }
 
 func TestCONC_02_OneActivePerRunner(t *testing.T) {
-	Scenario(t, "CONC-02", "A runner runs one agent at a time", PlannedC0004).
+	Scenario(t, "CONC-02", "A runner runs one agent at a time", PlannedC0005).
 		Given("runner R already running a sandbox for one dispatch", func(w *World) {
 			id, _ := w.SandboxMgr.Provision(ctx(), Dispatch{Runner: "R", Session: "s1"})
 			w.set("s1", id)
@@ -40,7 +40,7 @@ func TestCONC_02_OneActivePerRunner(t *testing.T) {
 }
 
 func TestCONC_03_SandboxIsolationUnderLoad(t *testing.T) {
-	Scenario(t, "CONC-03", "Concurrent sandboxes do not interfere", PlannedC0005).
+	Scenario(t, "CONC-03", "Concurrent sandboxes do not interfere", PlannedC0006).
 		Given("two runners each provisioning a sandbox at the same time", func(w *World) {
 			a, _ := w.SandboxMgr.Provision(ctx(), Dispatch{Runner: "A", Session: "sa"})
 			b, _ := w.SandboxMgr.Provision(ctx(), Dispatch{Runner: "B", Session: "sb"})
@@ -55,7 +55,7 @@ func TestCONC_03_SandboxIsolationUnderLoad(t *testing.T) {
 }
 
 func TestCONC_04_PerTopicOrdering(t *testing.T) {
-	Scenario(t, "CONC-04", "Per-topic delivery is ordered under concurrent publish", PlannedC0002).
+	Scenario(t, "CONC-04", "Per-topic delivery is ordered under concurrent publish", PlannedC0003).
 		Given("a subscriber to topic T", func(w *World) {
 			w.Session = w.OpenSession("R", Filter{Topics: []Topic{"T"}})
 		}).
@@ -72,7 +72,7 @@ func TestCONC_04_PerTopicOrdering(t *testing.T) {
 }
 
 func TestCONC_05_NoCrossSessionLeakage(t *testing.T) {
-	Scenario(t, "CONC-05", "Concurrent sessions never cross-deliver", PlannedC0002).
+	Scenario(t, "CONC-05", "Concurrent sessions never cross-deliver", PlannedC0003).
 		Given("sessions s1 and s2 active concurrently, each on its control topic", func(w *World) {
 			w.Session = w.OpenSession("s1", Filter{Topics: []Topic{"session.s1.control"}})
 		}).

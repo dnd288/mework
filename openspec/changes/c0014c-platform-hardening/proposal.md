@@ -24,10 +24,10 @@ Introduce two small, focused ports and pin them with the e2e scenarios
 
 ## Impact
 
-- **Depends on c0007-multi-tenancy** (runner eligibility is per-tenant).
-- **Depends on c0004-agent-runner** (runner presence and lifecycle).
-- **Depends on c0005-sandbox-runtime** (the sandbox is the injection target).
-- **Depends on c0003-agent-catalog** (the grant is the scope).
+- **Depends on c0000-tenancy** (runner eligibility is per-tenant).
+- **Depends on c0005-agent-runner** (runner presence and lifecycle).
+- **Depends on c0006-sandbox-runtime** (the sandbox is the injection target).
+- **Depends on c0004-agent-catalog** (the grant is the scope).
 - Module homes: `server/orchestrator` (`RunnerSelector`),
   `client/sandbox` (`SecretInjector`).
 - Behaviors are pinned by `tests/e2e/22_selection_secrets_test.go`.
