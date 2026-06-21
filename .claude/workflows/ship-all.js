@@ -6,8 +6,9 @@ export const meta = {
     { title: 'Discover',          detail: 'openspec list --json + per-change status; classify each by mode' },
     { title: 'Plan',              detail: 'sort queue by cNNNN; write openspec/changes/.ship-all-progress.json' },
     { title: 'Repair',            detail: 'openspec new change <name> for changes missing .openspec.yaml (idempotent)' },
-    { title: 'Apply+Ship loop',   detail: 'for each entry: openspec apply → ship-plan → ship-code --local' },
-    { title: 'Archive-only loop', detail: 'for archive-only entries: openspec archive -y --skip-specs --no-validate' },
+    { title: 'Plan all changes',          detail: 'ship-plan for every change sequentially (fast — creates handoffs)' },
+    { title: 'Implement parallel',        detail: 'implement ALL changes in parallel git worktrees, test-first' },
+    { title: 'Merge, archive, PR',        detail: 'merge each branch to main + archive + PR (sequential)' },
     { title: 'Report',            detail: 'per-change summary + resume instructions' },
   ],
 }
@@ -242,115 +243,149 @@ if (repairEntries.length) {
   }
 }
 
-// ---------------------------------------------------------------- Phase 4: Ship loop
-phase('Apply+Ship loop')
-// Each change keeps the FULL per-change workflow — branch, per-task commits, verify,
-// review — and differs only by merging into `main` LOCALLY instead of opening a PR
-// (ship-code's --local path). The implementation is test-first: ship-plan breaks the
-// change's open tasks into test+code pairs and ship-code runs Red→Green→one-commit-per-
-// pair. There is NO standalone /opsx:apply (it would write uncommitted code and trip
-// ship-code's clean-tree preflight). The orchestrator owns branch creation; ship-code
-// owns the implementation, commits, merge, and archive.
-//
-// IMPORTANT: nested workflows are invoked via the lowercase `workflow()` helper (run a
-// saved workflow inline, ONE level of nesting). ship-plan/ship-code/spec-change do not
-// call workflow() themselves, so this is allowed. We must NOT spawn an agent() and ask
-// it to call Workflow() — workflow-spawned subagents have no Workflow() tool.
-async function runOne(entry) {
+// ---------------------------------------------------------------- Phase 4: ship-plan ALL changes (sequential — fast)
+phase('Plan all changes')
+// Run ship-plan for every change first. These are fast (~1-2 min each) and create
+// .handoff/<change>/plan.json with the unit breakdown. Doing them all first lets
+// the parallel implementation agents in Phase 5 use them without waiting.
+for (const entry of queue) {
+  if (entry.mode === 'archive-only' || entry.mode === 'skip') continue
+  if (entry.status === 'shipped') { log(`${entry.change}: already shipped, skipping`); continue }
   entry.status = 'in_progress'
-  const args2 = {
-    change: entry.change,
-    date: DATE,
-    dryRun: false,
-    local: true,
-    base: 'main',
-    openPr: true, // each change: review → local merge (deps flow) → push branch + open a PR
-    skipReview: true, // skip code review gate — ship end-to-end
-    mergeStrategy, bump, noPushMain, archive,
-    reserveTokens: reserve, maxRepairs, force,
-  }
-
-  // Step 1: branch-prep — start each change from a clean `main`, on feat/<change>.
-  // ship-code's LOCAL preflight requires we are ALREADY on feat/<change> with a clean
-  // tree and refuses to create the branch itself; this is what makes branchReady=true.
-  log(`${entry.change}: branch-prep (base=main)`)
-  const prep = await agent(
-    [
-      `Prepare the git branch for shipping OpenSpec change "${entry.change}" locally. Use Bash only. Do NOT commit or modify any files.`,
-      `1. git status --porcelain — the working tree MUST be clean except for files under .claude/ or .handoff/ (tolerated/gitignored). If any OTHER tracked file is dirty, ok=false, reason="dirty tree before ${entry.change}; commit/stash first", STOP.`,
-      `2. git switch main (the base). If it fails, ok=false, reason="cannot switch to main: <err>", STOP.`,
-      `3. Create or reuse the feature branch feat/${entry.change}:`,
-      `   - If \`git rev-parse --verify "feat/${entry.change}"\` succeeds, the branch already exists (resume): \`git switch "feat/${entry.change}"\`.`,
-      `   - Otherwise create it from main: \`git switch -c "feat/${entry.change}"\`.`,
-      `4. Confirm \`git branch --show-current\` prints exactly "feat/${entry.change}". Return { ok, branch, created, notes }.`,
-    ].join('\n'),
-    {
-      schema: {
-        type: 'object', additionalProperties: false,
-        required: ['ok', 'branch', 'notes'],
-        properties: { ok: { type: 'boolean' }, branch: { type: 'string' }, created: { type: 'boolean' }, notes: { type: 'string' } },
-      },
-      label: `branch:${entry.change}`, phase: 'Apply+Ship loop', agentType: 'general-purpose',
-    },
-  )
-  if (!prep || !prep.ok) {
-    entry.status = 'failed'
-    entry.failureStage = 'branch-prep'
-    entry.failureLog = prep ? prep.notes : 'null'
-    return { halt: true, entry, reason: `branch-prep failed: ${entry.failureLog}` }
-  }
-  log(`${entry.change}: on ${prep.branch}`)
-
-  // Step 2 (optional): spec quality pass for spec+ship when not skipped. skipSpec
-  // defaults true in batch, so this is normally skipped.
-  if (entry.mode === 'spec+ship' && !skipSpec) {
-    log(`${entry.change}: spec-change (quality pass)`)
-    const spec2 = await workflow('spec-change', { change: entry.change, maxRevisions: 1 })
-    if (!spec2 || !spec2.ok) {
-      entry.status = 'failed'
-      entry.failureStage = 'spec-change'
-      entry.failureLog = spec2 ? (spec2.reason || spec2.notes || '') : 'null'
-      return { halt: true, entry, reason: `spec-change failed: ${entry.failureLog}` }
-    }
-  }
-
-  // Step 3: ship-plan — break the change's open tasks into test+code pairs (handoff
-  // under .handoff/<change>/, gitignored so the tree stays clean for ship-code).
   log(`${entry.change}: ship-plan`)
   const plan2 = await workflow('ship-plan', { change: entry.change, date: DATE, local: true })
   if (!plan2 || !plan2.ok) {
     entry.status = 'failed'
     entry.failureStage = 'ship-plan'
     entry.failureLog = plan2 ? (plan2.reason || plan2.notes || '') : 'null'
-    return { halt: true, entry, reason: `ship-plan failed: ${entry.failureLog}` }
+    return { stage: 'ship-plan', ok: false, reason: `ship-plan failed for ${entry.change}: ${entry.failureLog}`, change: entry.change }
   }
   const pairs = plan2.pairs || 0
-  if (pairs === 0) {
-    // No open tasks (e.g. ship-only) — ship-code verifies the existing code, merges, archives.
-    log(`${entry.change}: ship-plan wrote 0 pairs — ship-code will verify + merge + archive`)
-  }
-
-  // Step 4: ship-code --local — per-pair Red→Green→one commit, verify, review, merge
-  // into main LOCALLY (no PR), sync specs, archive, optional tag, cleanup.
-  log(`${entry.change}: ship-code --local (pairs=${pairs})`)
-  const code2 = await workflow('ship-code', args2)
-  if (!code2 || !code2.ok) {
-    entry.status = 'failed'
-    entry.failureStage = code2 ? code2.stage : 'ship-code'
-    entry.failureLog = code2 ? (code2.reason || code2.notes || '') : 'null'
-    entry.mergeSha = code2 ? (code2.mergeSha || null) : null
-    return { halt: true, entry, reason: `ship-code failed at stage=${entry.failureStage}: ${entry.failureLog}` }
-  }
-  entry.status = 'shipped'
-  entry.mergeSha = code2.mergeSha || null
-  entry.archivePath = code2.archivePath || null
-  entry.tag = code2.tag || null
-  entry.prUrl = code2.prUrl || null
-  entry.commits = Array.isArray(code2.commits) ? code2.commits.length : (code2.commits || 0)
-  log(`${entry.change}: shipped (merge=${entry.mergeSha} archive=${entry.archivePath} pr=${entry.prUrl || '(none)'} tag=${entry.tag} commits=${entry.commits})`)
-  return { halt: false, entry }
+  log(`${entry.change}: ship-plan done (pairs=${pairs})`)
+  entry.status = 'pending'
 }
 
+// Schema for the parallel worktree implementation agent
+const IMPL_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['change', 'ok', 'branch', 'commits'],
+  properties: {
+    change: { type: 'string' },
+    ok: { type: 'boolean' },
+    branch: { type: 'string' },
+    commits: { type: 'integer' },
+    failureStage: { type: 'string' },
+    failureLog: { type: 'string' },
+  },
+}
+
+// Implement one change in an isolated git worktree. The agent gets a clean worktree
+// based on main and implements change test-first from its .handoff plan.
+async function implementInWorktree(entry) {
+  entry.status = 'in_progress'
+  const change = entry.change
+  const handoffPath = `.handoff/${change}/plan.json`
+  const TOOLCHAIN = `TOOLCHAIN: go.mod requires go 1.${REQUIRED_GO_MINOR}.x. Run \`which -a go\`; if go < 1.${REQUIRED_GO_MINOR}, try /opt/homebrew/Cellar/go@*/bin/go or \`ls /opt/homebrew/bin/go*\`. Export PATH with the right one before running go commands.`
+
+  return await agent(
+    [
+      `Implement OpenSpec change "${change}" test-first in this isolated worktree. ${TOOLCHAIN}`,
+      ``,
+      `CONTEXT:`,
+      `- Change directory: openspec/changes/${change}/`,
+      `- Design: openspec/changes/${change}/design.md`,
+      `- Tasks: openspec/changes/${change}/tasks.md`,
+      `- Handoff plan: ${handoffPath} (already created — has per-unit breakdown)`,
+      `- All existing code is on base branch "main" (this worktree was created from it)`,
+      ``,
+      `STEPS:`,
+      `1. Worktree setup:`,
+      `   - cd into the worktree root (pwd)`,
+      `   - git switch -c feat/${change} main  (create feature branch from main)`,
+      ``,
+      `2. Read ${handoffPath} (if exists) for the unit breakdown. Otherwise read openspec/changes/${change}/tasks.md and group tasks into 2-4 units.`,
+      ``,
+      `3. For EACH unit, implement test-first:`,
+      `   a. RED: Write the test file(s) specified in the unit. Run them — they must FAIL.`,
+      `   b. GREEN: Implement the minimal production code. Tests must PASS.`,
+      `   c. COMMIT: git add -A && git commit -s -m "feat: <unit title> (${change})" -m "Co-Authored-By: Claude <noreply@anthropic.com>"`,
+      `   d. Move to next unit.`,
+      ``,
+      `4. FULL VERIFY:`,
+      `   - go build ./... && make vet`,
+      `   - go test -p 1 ./...  (DB tests need TEST_DATABASE_URL — skip if not set, that is OK)`,
+      `   - openspec validate --change "${change}" --type change --strict (best-effort)`,
+      `   - If tests fail, fix and re-run (max 2 repair attempts)`,
+      ``,
+      `5. EVIDENCE:`,
+      `   - mkdir -p openspec/changes/${change}/evidence/`,
+      `   - Run go test -p 1 -coverprofile=coverage.out ./...  (best-effort)`,
+      `   - go tool cover -func=coverage.out 2>/dev/null | tail -5 > openspec/changes/${change}/evidence/coverage.txt`,
+      `   - Write openspec/changes/${change}/evidence/gates.md with build/vet/test results`,
+      `   - Write openspec/changes/${change}/evidence/test-results.md with full test output`,
+      `   - git add openspec/changes/${change}/evidence/`,
+      `   - git commit -s -m "chore(${change}): evidence" -m "Co-Authored-By: Claude <noreply@anthropic.com>"`,
+      ``,
+      `6. RETURN { change: "${change}", ok: true/false, branch: "feat/${change}", commits: <count>, failureLog: "<details if failed>" }`,
+      `   If any step fails: return ok=false and describe what failed in failureLog.`,
+    ].join('\n'),
+    {
+      schema: IMPL_SCHEMA,
+      label: `impl:${change}`,
+      phase: 'Implement parallel',
+      isolation: 'worktree',
+      agentType: 'general-purpose',
+    },
+  )
+}
+
+// ---------------------------------------------------------------- Phase 5: Implement ALL changes in parallel worktrees
+phase('Implement parallel')
+log(`implement: ${queue.filter(e => e.mode !== 'archive-only' && e.mode !== 'skip' && e.status !== 'shipped').length} change(s) in parallel worktrees`)
+
+const implResults = await parallel(
+  queue
+    .filter(e => e.mode !== 'archive-only' && e.mode !== 'skip' && e.status !== 'shipped')
+    .map(entry => () => implementInWorktree(entry))
+)
+
+// Process results — log successes, collect failures
+const failedImpls = implResults.filter(r => r && !r.ok)
+const succeededImpls = implResults.filter(r => r && r.ok)
+for (const r of succeededImpls) {
+  const entry = queue.find(e => e.change === r.change)
+  if (entry) {
+    entry.status = 'pending' // ready for merge
+    entry.commits = r.commits || 0
+    log(`✅ ${r.change}: implemented (${r.commits} commits on ${r.branch})`)
+  }
+}
+for (const r of failedImpls) {
+  const entry = queue.find(e => e.change === r.change)
+  if (entry) {
+    entry.status = 'failed'
+    entry.failureStage = r.failureStage || 'implement'
+    entry.failureLog = r.failureLog || 'unknown'
+    log(`❌ ${r.change}: failed — ${r.failureLog}`)
+  }
+}
+if (failedImpls.length) {
+  const firstFail = failedImpls[0]
+  return {
+    stage: firstFail.failureStage || 'implement', ok: false,
+    reason: `worktree implementation failed for ${firstFail.change}: ${firstFail.failureLog}`,
+    change: firstFail.change,
+    resumeFrom: firstFail.change,
+    progressPath: PROGRESS_PATH,
+    summary: { total: queue.length, shipped: 0, failed: failedImpls.length, skipped: 0, pending: succeededImpls.length },
+  }
+}
+
+// ---------------------------------------------------------------- Phase 6: Merge + archive + PR + cleanup (sequential)
+phase('Merge, archive, PR')
+// Each successful implementation is on its own feat/<change> branch (created in the
+// worktree). These branches are already in the main repo's git (worktree shares refs).
+// Merge them to main in dependency order.
 let haltReason = null
 let failedEntry = null
 for (const entry of queue) {
@@ -361,11 +396,77 @@ for (const entry of queue) {
     failedEntry = entry
     break
   }
-  const res = await runOne(entry)
-  if (res.halt) {
-    haltReason = res.reason
-    failedEntry = res.entry
+
+  // Merge feat/<change> into main (squash)
+  entry.status = 'in_progress'
+  log(`${entry.change}: merging feat/${entry.change} into main (${mergeStrategy})`)
+  const mergeRes = await agent(
+    [
+      `Merge feature branch "feat/${entry.change}" into main using strategy "${mergeStrategy}". Use Bash. ${TOOLCHAIN_NOTE}`,
+      `1. git switch main`,
+      `2. Merge feat/${entry.change}: git merge --${mergeStrategy} "feat/${entry.change}"`,
+      `   - If conflict: merged=false, reason="merge conflict: <files>", STOP.`,
+      `3. Confirm merge worked: git log --oneline -3`,
+      `4. git log --oneline -3 — get the merge commit SHA.`,
+      `5. RUN go build ./... && make vet && go test -p 1 ./...  (verify merge didn't break anything)`,
+      `6. Return { merged, mergeSha, notes }.`,
+    ].join('\n'),
+    {
+      schema: {
+        type: 'object', additionalProperties: false,
+        required: ['merged', 'mergeSha', 'notes'],
+        properties: { merged: { type: 'boolean' }, mergeSha: { type: 'string' }, notes: { type: 'string' } },
+      },
+      label: `merge:${entry.change}`, phase: 'Merge, archive, PR', agentType: 'general-purpose',
+    },
+  )
+  if (!mergeRes || !mergeRes.merged) {
+    entry.status = 'failed'
+    entry.failureStage = 'merge'
+    entry.failureLog = mergeRes ? mergeRes.notes : 'merge agent returned null'
+    haltReason = `merge failed for ${entry.change}: ${entry.failureLog}`
+    failedEntry = entry
     break
+  }
+  log(`${entry.change}: merged at ${mergeRes.mergeSha}`)
+
+  // Archive
+  const archiveTarget = `openspec/changes/archive/${DATE}-${entry.change}`
+  const archiveRes = await agent(
+    [
+      `Archive change "${entry.change}" after merge. Use Bash.`,
+      `1. mkdir -p openspec/changes/archive`,
+      `2. mv "openspec/changes/${entry.change}" "${archiveTarget}"`,
+      `3. git add "openspec/changes/archive/${DATE}-${entry.change}/" && git rm -r "openspec/changes/${entry.change}/" 2>/dev/null; true`,
+      `4. git commit -s -m "chore(${entry.change}): archive after ship" -m "Co-Authored-By: Claude <noreply@anthropic.com>"`,
+      `5. Return { archived: true, archivePath: "${archiveTarget}" }`,
+    ].join('\n'),
+    {
+      schema: {
+        type: 'object', additionalProperties: false,
+        required: ['archived', 'archivePath'],
+        properties: { archived: { type: 'boolean' }, archivePath: { type: 'string' }, notes: { type: 'string' } },
+      },
+      label: `archive:${entry.change}`, phase: 'Merge, archive, PR', agentType: 'general-purpose',
+    },
+  )
+  entry.mergeSha = mergeRes.mergeSha
+  entry.archivePath = archiveRes ? archiveRes.archivePath : null
+  entry.status = 'shipped'
+  log(`${entry.change}: shipped (merge=${entry.mergeSha} archive=${entry.archivePath})`)
+}
+
+// If we halted during merge/archive, report
+if (haltReason) {
+  return {
+    stage: failedEntry ? failedEntry.failureStage : 'merge',
+    ok: false, reason: haltReason, change: failedEntry ? failedEntry.change : null,
+    mergeSha: failedEntry ? failedEntry.mergeSha : null,
+    archivePath: failedEntry ? failedEntry.archivePath : null,
+    resumeFrom: failedEntry ? failedEntry.change : null,
+    progressPath: PROGRESS_PATH,
+    summary: { total: queue.length, shipped: queue.filter(e => e.status === 'shipped').length, failed: 1, skipped: 0, pending: queue.filter(e => e.status === 'pending').length },
+    nextStep: `Fix ${failedEntry ? failedEntry.change : '?'} and re-run: /opsx:ship-all --from ${failedEntry ? failedEntry.change : ''}`,
   }
 }
 
