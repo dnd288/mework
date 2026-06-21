@@ -61,7 +61,7 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	}
 
 	// Channel routing infrastructure.
-	channelFeature := channel.NewFeatureFlag(false) // Off by default; backward compatible.
+	channelFeature := channel.NewFeatureFlag(true) // On by default for E2E; use SetEnabled(false) in production.
 	channelReg := channel.NewPostgresRegistry(pool)
 	if err := channelReg.PopulateCache(context.Background()); err != nil {
 		log.Printf("Failed to populate channel cache: %v", err)
@@ -85,10 +85,12 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 
 	runtimeAuth := middleware.NewRuntimeAuthenticator(pool, cfg.ServerKey)
 	ackHandlers := orchestrator.NewAckHandlers(pool, cfg.MeworkSecretKey, cfg.MelloBaseURL)
+	claimHandlers := orchestrator.NewClaimHandlers(pool)
 
 	r.Route("/api/v1/jobs", func(r chi.Router) {
 		r.Use(runtimeAuth.Middleware)
 		r.Post("/{id}/ack", ackHandlers.AckJob)
+		r.Post("/claim", claimHandlers.ClaimJob)
 		r.Post("/{id}/heartbeat", ackHandlers.Heartbeat)
 		r.Get("/subscribe", sseHandler.Subscribe)
 		r.Post("/messages/{msgID}/ack", msgAckHandler.Ack)
@@ -101,6 +103,8 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	// activated once the object store is wired).
 	artifactStore := NewDummyArtifactStore()
 	artifactHandlers := NewArtifactHandlers(artifactStore)
+
+	channelHandlers := channel.NewHandlers(pool)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(patAuth.Middleware)
@@ -130,6 +134,9 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 		// Artifact endpoints: list artifacts for a run, download a single artifact.
 		r.Get("/runs/{runID}/artifacts", artifactHandlers.ListArtifacts)
 		r.Get("/runs/{runID}/artifacts/{name}", artifactHandlers.GetArtifact)
+
+		// Channel sessions endpoint: list active channel bindings.
+		r.Get("/channels", channelHandlers.ListChannels)
 	})
 
 	r.Post("/api/v1/runners/enroll", registryHandlers.EnrollRunner)
@@ -144,6 +151,10 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 
 	// Start background notification retry sweeper.
 	startNotifySweeper(context.Background(), notifierSvc)
+
+	// Start background channel session sweeper (30s interval).
+	channelSweeper := channel.NewSweeper(pool, channelReg, 30*time.Second)
+	channelSweeper.Start(context.Background())
 
 	return &Server{
 		Router:           r,
