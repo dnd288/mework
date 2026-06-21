@@ -8,9 +8,7 @@ limits into a ready-to-run combo — and the execution model for running such a
 definition either one-shot by reference or as a long-lived interactive multi-turn
 session over a pluggable engine, with live observability and tenant-scoped,
 grant-enforced remote control.
-
 ## Requirements
-
 ### Requirement: Prebuilt sandbox definition
 
 The system SHALL represent a runnable agent as a **prebuilt sandbox definition**: a
@@ -156,10 +154,11 @@ field.
 
 ### Requirement: Remote-control authorization
 
-All session operations (create, attach, send turn, cancel, close) SHALL be authorized:
-**tenant-isolated**, bound to the session **owner**, and **grant-enforced** per the
-`auth-and-secrets` permission model. A caller lacking the required grant or crossing a
-tenant boundary MUST be denied.
+All session operations (create, attach, send turn, cancel, close, list) SHALL be
+authorized: **tenant-isolated**, bound to the session **owner**, and **grant-enforced**
+per the `auth-and-secrets` permission model. A caller lacking the required grant or
+crossing a tenant boundary MUST be denied. For listing, the tenant scope MUST be derived
+from the authenticated caller, never from a caller-supplied argument.
 
 #### Scenario: Cross-tenant access denied
 
@@ -170,3 +169,9 @@ tenant boundary MUST be denied.
 
 - **WHEN** a caller attempts a session operation for which it has no permission grant
 - **THEN** the system denies the operation
+
+#### Scenario: List is scoped to the caller's own tenant
+
+- **WHEN** a caller lists sessions
+- **THEN** the system returns only the authenticated caller's tenant's sessions, regardless of any tenant argument the caller supplies
+
