@@ -1,10 +1,13 @@
 package catalog
 
 import (
+	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -381,5 +384,238 @@ func TestHandlers_DispatchCarriesGrant(t *testing.T) {
 		}
 	default:
 		t.Error("no dispatch message received")
+	}
+}
+
+// --- Unit 03: Bundle form and channel-key dispatch tests ---
+
+func TestHandlers_PublishBundleForm(t *testing.T) {
+	// Create an in-memory zip containing a valid sandbox bundle.
+	zipBuf := new(bytes.Buffer)
+	zw := zip.NewWriter(zipBuf)
+	sf, err := zw.Create("sandbox.yaml")
+	if err != nil {
+		t.Fatalf("create sandbox.yaml in zip: %v", err)
+	}
+	_, _ = sf.Write([]byte("name: test-agent\nversion: 1.0.0\nspec: claude-code\nbackend: local\nauthor: test\n"))
+	df, err := zw.Create("definition.md")
+	if err != nil {
+		t.Fatalf("create definition.md in zip: %v", err)
+	}
+	_, _ = df.Write([]byte("# Test agent\n\nPrompt content."))
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+
+	router, _, _ := setupTestRouter(t)
+
+	body := map[string]any{
+		"version": "1.0.0",
+		"form":    "bundle",
+		"payload": base64.StdEncoding.EncodeToString(zipBuf.Bytes()),
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/bundle-agent/versions", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// RED: bundle form is not yet supported — expects 201 but gets 400.
+	if w.Code != http.StatusCreated {
+		t.Fatalf("PublishBundle status = %d, want %d. Body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if f, ok := resp["form"].(string); !ok || f != "bundle" {
+		t.Errorf("response form = %v, want %q", resp["form"], "bundle")
+	}
+}
+
+func TestHandlers_PublishBundle_MissingSandboxYaml(t *testing.T) {
+	// Create a zip that is missing sandbox.yaml.
+	zipBuf := new(bytes.Buffer)
+	zw := zip.NewWriter(zipBuf)
+	df, err := zw.Create("definition.md")
+	if err != nil {
+		t.Fatalf("create definition.md in zip: %v", err)
+	}
+	_, _ = df.Write([]byte("# Incomplete bundle"))
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+
+	router, _, _ := setupTestRouter(t)
+
+	body := map[string]any{
+		"version": "1.0.0",
+		"form":    "bundle",
+		"payload": base64.StdEncoding.EncodeToString(zipBuf.Bytes()),
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/bundle-agent/versions", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// The response should be 400, but the error body should reference sandbox.yaml.
+	// RED: bundle form is not yet recognized, so the error body says "unsupported form".
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("PublishBundle missing sandbox.yaml: status = %d, want %d. Body: %s",
+			w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	bodyStr := w.Body.String()
+	if !strings.Contains(bodyStr, "sandbox.yaml") {
+		t.Errorf("expected error to mention 'sandbox.yaml', got: %s", bodyStr)
+	}
+}
+
+func TestHandlers_PublishBundle_InvalidSandboxYaml(t *testing.T) {
+	// Create a zip where sandbox.yaml has missing required fields (no spec, no backend).
+	zipBuf := new(bytes.Buffer)
+	zw := zip.NewWriter(zipBuf)
+	sf, err := zw.Create("sandbox.yaml")
+	if err != nil {
+		t.Fatalf("create sandbox.yaml in zip: %v", err)
+	}
+	_, _ = sf.Write([]byte("name: partial-agent\nversion: 1.0.0\nauthor: test\n"))
+	df, err := zw.Create("definition.md")
+	if err != nil {
+		t.Fatalf("create definition.md in zip: %v", err)
+	}
+	_, _ = df.Write([]byte("# Partial bundle"))
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+
+	router, _, _ := setupTestRouter(t)
+
+	body := map[string]any{
+		"version": "1.0.0",
+		"form":    "bundle",
+		"payload": base64.StdEncoding.EncodeToString(zipBuf.Bytes()),
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/bundle-agent/versions", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("PublishBundle invalid sandbox.yaml: status = %d, want %d. Body: %s",
+			w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	bodyStr := w.Body.String()
+	if !strings.Contains(bodyStr, "spec") || !strings.Contains(bodyStr, "backend") {
+		t.Errorf("expected error to mention 'spec' and 'backend', got: %s", bodyStr)
+	}
+}
+
+func TestHandlers_PullBundleForm(t *testing.T) {
+	// Create a valid bundle zip and publish it.
+	zipBuf := new(bytes.Buffer)
+	zw := zip.NewWriter(zipBuf)
+	sf, _ := zw.Create("sandbox.yaml")
+	_, _ = sf.Write([]byte("name: pull-agent\nversion: 1.0.0\nspec: claude-code\nbackend: local\nauthor: test\n"))
+	df, _ := zw.Create("definition.md")
+	_, _ = df.Write([]byte("# Pull test"))
+	_ = zw.Close()
+
+	router, _, _ := setupTestRouter(t)
+
+	pubBody := map[string]any{
+		"version": "1.0.0",
+		"form":    "bundle",
+		"payload": base64.StdEncoding.EncodeToString(zipBuf.Bytes()),
+	}
+	b, _ := json.Marshal(pubBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/pull-agent/versions", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	pubW := httptest.NewRecorder()
+	router.ServeHTTP(pubW, req)
+
+	// RED: publish fails because bundle form is not recognized.
+	if pubW.Code != http.StatusCreated {
+		t.Fatalf("Publish for pull test: status = %d, want %d. Body: %s",
+			pubW.Code, http.StatusCreated, pubW.Body.String())
+	}
+
+	// Pull the published agent.
+	pullReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/pull-agent/versions/1.0.0/pull", nil)
+	pullReq.Header.Set("Authorization", "Bearer rt_valid_runtime_token")
+	pullReq.Header.Set("X-Grant", `{"ops":["agent.pull"]}`)
+	pullW := httptest.NewRecorder()
+	router.ServeHTTP(pullW, pullReq)
+
+	if pullW.Code != http.StatusOK {
+		t.Fatalf("PullBundle status = %d, want %d. Body: %s", pullW.Code, http.StatusOK, pullW.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(pullW.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode pull response: %v", err)
+	}
+	// RED: versionContent defaults to "definition" for non-"image" forms.
+	if f, ok := resp["form"].(string); !ok || f != "bundle" {
+		t.Errorf("pull form = %v, want %q", resp["form"], "bundle")
+	}
+	if content, ok := resp["content"].(string); !ok || content == "" {
+		t.Errorf("pull content = %v, want non-empty zip content", resp["content"])
+	}
+}
+
+func TestHandlers_DispatchWithChannelKey(t *testing.T) {
+	router, _, broker := setupTestRouter(t)
+
+	// Publish an agent version first.
+	publishVersionHelper(t, router, "code-fixer", "1.2.0", "definition", "manifest content...")
+
+	// Subscribe to the target runner's dispatch topic.
+	sub, err := broker.Subscribe(nil, bus.Identity("test"), bus.Filter("runner.R.dispatch"), "")
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer sub.Close()
+
+	// Dispatch with a channel_key in the request body.
+	dispatchBody := map[string]any{
+		"target":      "runner-R",
+		"channel_key": "mello:TICKET-99",
+		"grant": map[string]any{
+			"ops": []string{"agent.pull"},
+		},
+	}
+	b, _ := json.Marshal(dispatchBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/code-fixer/dispatch", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer pat_operator_token")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("Dispatch status = %d, want %d. Body: %s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	// Verify the dispatch message includes channel context.
+	select {
+	case evt := <-sub.Events():
+		var msg struct {
+			Agent      map[string]string `json:"agent"`
+			Grant      json.RawMessage   `json:"grant"`
+			Runner     string            `json:"runner"`
+			Session    string            `json:"session,omitempty"`
+			ChannelKey string            `json:"channel_key,omitempty"`
+		}
+		if err := json.Unmarshal(evt.Message.Payload, &msg); err != nil {
+			t.Fatalf("unmarshal dispatch message: %v", err)
+		}
+		// RED: DispatchToRunner does not currently accept or forward channel_key.
+		// The message will not contain channel context.
+		if msg.ChannelKey == "" {
+			t.Error("dispatch message missing channel_key — expected channel context in dispatch")
+		}
+	default:
+		t.Error("no dispatch message received on runner.R.dispatch topic")
 	}
 }

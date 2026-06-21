@@ -329,3 +329,195 @@ func seedRuntime(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID
 	}
 	return id
 }
+
+// ---- Channel routing spec-registration tests ----
+
+// TestCreateRuntime_WithSpecs verifies that a runtime created with specs has the
+// Specs field populated on the returned Runtime and persisted in the DB column.
+// Delta-spec scenario: "Enroll with specs".
+func TestCreateRuntime_WithSpecs(t *testing.T) {
+	ctx, svc, accountID := newTenancyTestService(t)
+
+	ten, err := svc.RegisterTenant(ctx, "specs-test")
+	if err != nil {
+		t.Fatalf("RegisterTenant: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		specs []string
+	}{
+		{name: "single spec", specs: []string{"claude-code"}},
+		{name: "multiple specs", specs: []string{"claude-code", "codex"}},
+		{name: "nil specs (backward compat)", specs: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt, _, err := svc.CreateRuntime(ctx, *ten, accountID, "code-"+tt.name, "label-"+tt.name, tt.specs...)
+			if err != nil {
+				t.Fatalf("CreateRuntime(%s): %v", tt.name, err)
+			}
+
+			// Verify Specs field on returned struct
+			if len(rt.Specs) != len(tt.specs) {
+				t.Errorf("CreateRuntime(%s): Specs = %v, want %v", tt.name, rt.Specs, tt.specs)
+			}
+			for i := range tt.specs {
+				if i >= len(rt.Specs) || rt.Specs[i] != tt.specs[i] {
+					t.Errorf("CreateRuntime(%s): Specs[%d] = %q, want %q", tt.name, i, rt.Specs[i], tt.specs[i])
+				}
+			}
+
+			// Verify DB column reflects the value
+			var dbSpecs []string
+			err = svc.pool.QueryRow(ctx, "SELECT specs FROM runtimes WHERE id = $1", rt.ID).Scan(&dbSpecs)
+			if err != nil {
+				t.Fatalf("query specs from DB: %v", err)
+			}
+			if len(dbSpecs) != len(tt.specs) {
+				t.Errorf("CreateRuntime(%s): DB specs = %v, want %v", tt.name, dbSpecs, tt.specs)
+			}
+		})
+	}
+}
+
+// TestEnrollRunner_UnknownSpec verifies that enrolling with a spec not in the
+// agent catalog is rejected with ErrInvalidSpec. Delta-spec scenario:
+// "Reject unknown spec".
+func TestEnrollRunner_UnknownSpec(t *testing.T) {
+	ctx, svc, accountID := newTenancyTestService(t)
+
+	ten, err := svc.RegisterTenant(ctx, "unknown-spec-test")
+	if err != nil {
+		t.Fatalf("RegisterTenant: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		specs    []string
+		wantErr  error
+	}{
+		{
+			name:     "non-existent spec is rejected",
+			specs:    []string{"non-existent-agent"},
+			wantErr:  ErrInvalidSpec,
+		},
+		{
+			name:     "partially known spec list rejects all",
+			specs:    []string{"claude-code", "non-existent-agent"},
+			wantErr:  ErrInvalidSpec,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.EnrollRunnerWithSpecs(ctx, "valid-token", accountID, "runner-"+tt.name, "label-"+tt.name, tt.specs)
+			if err != tt.wantErr {
+				t.Fatalf("EnrollRunnerWithSpecs(%s): err = %v, want %v", tt.name, err, tt.wantErr)
+			}
+		})
+	}
+	_ = ten
+}
+
+// TestEnrollRunner_NoSpecs_BackwardCompat verifies that enrolling without specs
+// (specs=NULL) preserves backward compatibility — SelectWorker matches this
+// runner for any spec query. Delta-spec scenario:
+// "Backward-compatible enrollment (no specs)".
+func TestEnrollRunner_NoSpecs_BackwardCompat(t *testing.T) {
+	ctx, svc, accountID := newTenancyTestService(t)
+
+	ten, err := svc.RegisterTenant(ctx, "backward-compat-test")
+	if err != nil {
+		t.Fatalf("RegisterTenant: %v", err)
+	}
+
+	// Enroll without specs — should store NULL
+	rt, _, err := svc.CreateRuntime(ctx, *ten, accountID, "backward-rt", "Backward Compat Runner")
+	if err != nil {
+		t.Fatalf("CreateRuntime: %v", err)
+	}
+
+	// Verify DB stores NULL
+	var dbSpecs []string
+	err = svc.pool.QueryRow(ctx, "SELECT specs FROM runtimes WHERE id = $1", rt.ID).Scan(&dbSpecs)
+	if err != nil {
+		t.Fatalf("query DB specs: %v", err)
+	}
+	if dbSpecs != nil {
+		t.Errorf("expected NULL specs in DB, got %v", dbSpecs)
+	}
+
+	// SelectWorker should match this runner for any spec
+	selected, err := svc.SelectWorker(ctx, "any-spec", *ten)
+	if err != nil {
+		t.Fatalf("SelectWorker: %v", err)
+	}
+	if selected.ID != rt.ID {
+		t.Errorf("SelectWorker returned runner %s, want %s (backward compat runner with NULL specs)", selected.ID, rt.ID)
+	}
+}
+
+// TestHeartbeat_UpdatesSpecs verifies that a heartbeat carrying specs updates
+// the runtimes.specs column. Delta-spec scenario: "Specs updated via heartbeat".
+func TestHeartbeat_UpdatesSpecs(t *testing.T) {
+	ctx, svc, accountID := newTenancyTestService(t)
+
+	ten, err := svc.RegisterTenant(ctx, "heartbeat-specs-test")
+	if err != nil {
+		t.Fatalf("RegisterTenant: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		initial  []string
+		updated  []string
+	}{
+		{
+			name:     "add spec",
+			initial:  []string{"claude-code"},
+			updated:  []string{"claude-code", "codex"},
+		},
+		{
+			name:     "remove spec",
+			initial:  []string{"claude-code", "codex"},
+			updated:  []string{"claude-code"},
+		},
+		{
+			name:     "change spec set",
+			initial:  []string{"old-spec"},
+			updated:  []string{"new-spec"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt, _, err := svc.CreateRuntime(ctx, *ten, accountID, "code-"+tt.name, "label-"+tt.name, tt.initial...)
+			if err != nil {
+				t.Fatalf("CreateRuntime(%s): %v", tt.name, err)
+			}
+
+			// Update specs via UpdateRuntimeSpecs (called by heartbeat handler)
+			err = svc.UpdateRuntimeSpecs(ctx, rt.ID, tt.updated)
+			if err != nil {
+				t.Fatalf("UpdateRuntimeSpecs(%s): %v", tt.name, err)
+			}
+
+			// Verify DB column updated
+			var dbSpecs []string
+			err = svc.pool.QueryRow(ctx, "SELECT specs FROM runtimes WHERE id = $1", rt.ID).Scan(&dbSpecs)
+			if err != nil {
+				t.Fatalf("query DB specs after update: %v", err)
+			}
+			if len(dbSpecs) != len(tt.updated) {
+				t.Errorf("UpdateRuntimeSpecs(%s): DB specs = %v, want %v", tt.name, dbSpecs, tt.updated)
+			}
+			for i := range tt.updated {
+				if i >= len(dbSpecs) || dbSpecs[i] != tt.updated[i] {
+					t.Errorf("UpdateRuntimeSpecs(%s): DB specs[%d] = %q, want %q", tt.name, i, dbSpecs[i], tt.updated[i])
+				}
+			}
+		})
+	}
+}

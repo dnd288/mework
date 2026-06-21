@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"mework/libs/server/bus"
+	"mework/libs/server/channel"
 	"mework/libs/server/platform/secret"
 	"mework/libs/server/platform/store"
 	"mework/libs/server/provider"
@@ -182,9 +183,9 @@ func TestWebhookHandler(t *testing.T) {
 	adapter := melloprovider.NewMelloAdapter(mockMello.URL)
 	provider.Register(adapter)
 
-	// Create broker spy and handler
+	// Create broker spy and handler (no channel router)
 	spy := &spyBroker{}
-	handler := NewHandler(pool, spy, secretKey, mockMello.URL)
+	handler := NewHandler(pool, spy, secretKey, mockMello.URL, nil)
 
 	// Router for dispatching path params
 	r := chi.NewRouter()
@@ -345,4 +346,389 @@ func TestWebhookHandler(t *testing.T) {
 			t.Errorf("expected 404 for unknown provider, got %d", rec.Code)
 		}
 	})
+}
+
+// spyChannelRouter records Route calls for webhook handler tests.
+type spyChannelRouter struct {
+	mu          sync.Mutex
+	routeCalls  []routeCall
+}
+
+type routeCall struct {
+	providerCode string
+	resourceID   string
+	eventType    string
+	payload      []byte
+}
+
+func (s *spyChannelRouter) Route(_ context.Context, providerCode, resourceID, eventType string, payload []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routeCalls = append(s.routeCalls, routeCall{
+		providerCode: providerCode,
+		resourceID:   resourceID,
+		eventType:    eventType,
+		payload:      payload,
+	})
+	return nil
+}
+
+func (s *spyChannelRouter) IsEnabled() bool {
+	return true
+}
+
+func (s *spyChannelRouter) routeCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.routeCalls)
+}
+
+func (s *spyChannelRouter) ChannelKey(providerCode, resourceID string) string {
+	return providerCode + ":" + resourceID
+}
+
+// TestWebhookHandler_ChannelRoutingPath verifies that when the channel routing
+// feature flag is enabled, the webhook handler calls Route on the channel router
+// instead of publishing to runner.<profile>.dispatch.
+func TestWebhookHandler_ChannelRoutingPath(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping channel routing webhook test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	err := store.RunMigrations(dsn)
+	if err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+	defer func() { _ = store.RollbackMigrations(dsn) }()
+
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("failed to connect to test db: %v", err)
+	}
+	defer pool.Close()
+
+	_, err = pool.Exec(ctx, "DELETE FROM jobs; DELETE FROM watched_containers; DELETE FROM account_identities; DELETE FROM runtimes; DELETE FROM profiles; DELETE FROM provider_connections; DELETE FROM accounts;")
+	if err != nil {
+		t.Fatalf("failed to clean db: %v", err)
+	}
+
+	secretKey := "mework_super_secret_aes_key_123"
+	webhookSecret := "mello_webhook_signing_secret"
+	melloToken := "test_mello_access_token"
+
+	var accountID string
+	err = pool.QueryRow(ctx, "INSERT INTO accounts (name) VALUES ('Channel Routing Test Account') RETURNING id").Scan(&accountID)
+	if err != nil {
+		t.Fatalf("failed to insert account: %v", err)
+	}
+
+	encryptedToken, err := secret.Seal(melloToken, secretKey)
+	if err != nil {
+		t.Fatalf("failed to encrypt token: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO provider_connections (account_id, provider_code, webhook_secret, mcp_auth_enc)
+		VALUES ($1, $2, $3, $4)
+	`, accountID, "mello", webhookSecret, encryptedToken)
+	if err != nil {
+		t.Fatalf("failed to insert provider connection: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO account_identities (account_id, provider_code, external_user_id)
+		VALUES ($1, $2, $3)
+	`, accountID, "mello", "user-456")
+	if err != nil {
+		t.Fatalf("failed to insert account identity: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO watched_containers (account_id, provider_code, external_container_id)
+		VALUES ($1, $2, $3)
+	`, accountID, "mello", "board-789")
+	if err != nil {
+		t.Fatalf("failed to insert watched container: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO runtimes (account_id, code, label, token_lookup)
+		VALUES ($1, $2, $3, $4)
+	`, accountID, "dev", "Dev Machine", "lookup-hash-rt2")
+	if err != nil {
+		t.Fatalf("failed to insert runtime: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO profiles (account_id, name, body)
+		VALUES ($1, $2, $3)
+	`, accountID, "dev", "system prompt for channel routing test")
+	if err != nil {
+		t.Fatalf("failed to insert profile: %v", err)
+	}
+
+	// Mock Mello server
+	mockMello := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenHeader := r.Header.Get("Authorization")
+		if tokenHeader != "Bearer "+melloToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/tickets/ticket-999" {
+			ticket := mello.TicketDetail{
+				Ticket: mello.Ticket{
+					ID:          "ticket-999",
+					Title:       "Channel Routing Test Ticket",
+					Description: "Test Description",
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(ticket)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer mockMello.Close()
+
+	adapter := melloprovider.NewMelloAdapter(mockMello.URL)
+	provider.Register(adapter)
+
+	spy := &spyBroker{}
+	channelSpy := &spyChannelRouter{}
+
+	// Pass the spy channel router as the 5th arg — it implements both
+	// channelRouter (Route) and featureChecker (IsEnabled).
+	handler := NewHandler(pool, spy, secretKey, mockMello.URL, channelSpy)
+
+	r := chi.NewRouter()
+	r.Post("/webhooks/{provider}", handler.ServeHTTP)
+
+	validPayload := []byte(`{
+		"id": "event-200",
+		"type": "comment.added",
+		"actor": { "id": "user-456", "name": "Alice" },
+		"model": { "type": "ticket", "board_id": "board-789" },
+		"data": { "id": "comment-crt", "body": "@mework dev review fix the bug", "ticket_id": "ticket-999" }
+	}`)
+
+	ts := fmt.Sprintf("%d", time.Now().Unix())
+	mac := hmac.New(sha256.New, []byte(webhookSecret))
+	mac.Write([]byte(ts))
+	mac.Write([]byte("."))
+	mac.Write(validPayload)
+	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(validPayload)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Mello-Signature", sig)
+	req.Header.Set("X-Mello-Timestamp", ts)
+	req.Header.Set("X-Mello-Delivery-Id", "delivery-uuid-crt-1")
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify the event was routed through the channel spy
+	if channelSpy.routeCount() != 1 {
+		t.Errorf("expected 1 channel route call, got %d", channelSpy.routeCount())
+	}
+}
+
+// TestWebhookHandler_LegacyPathWithFeatureOff verifies that when the channel
+// routing feature flag is off, the handler publishes to runner.<profile>.dispatch
+// (the existing behavior is preserved).
+func TestWebhookHandler_LegacyPathWithFeatureOff(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping legacy path webhook test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	err := store.RunMigrations(dsn)
+	if err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+	defer func() { _ = store.RollbackMigrations(dsn) }()
+
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("failed to connect to test db: %v", err)
+	}
+	defer pool.Close()
+
+	_, err = pool.Exec(ctx, "DELETE FROM jobs; DELETE FROM watched_containers; DELETE FROM account_identities; DELETE FROM runtimes; DELETE FROM profiles; DELETE FROM provider_connections; DELETE FROM accounts;")
+	if err != nil {
+		t.Fatalf("failed to clean db: %v", err)
+	}
+
+	secretKey := "mework_super_secret_aes_key_123"
+	webhookSecret := "mello_webhook_signing_secret"
+	melloToken := "test_mello_access_token"
+
+	var accountID string
+	err = pool.QueryRow(ctx, "INSERT INTO accounts (name) VALUES ('Legacy Path Test Account') RETURNING id").Scan(&accountID)
+	if err != nil {
+		t.Fatalf("failed to insert account: %v", err)
+	}
+
+	encryptedToken, err := secret.Seal(melloToken, secretKey)
+	if err != nil {
+		t.Fatalf("failed to encrypt token: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO provider_connections (account_id, provider_code, webhook_secret, mcp_auth_enc)
+		VALUES ($1, $2, $3, $4)
+	`, accountID, "mello", webhookSecret, encryptedToken)
+	if err != nil {
+		t.Fatalf("failed to insert provider connection: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO account_identities (account_id, provider_code, external_user_id)
+		VALUES ($1, $2, $3)
+	`, accountID, "mello", "user-456")
+	if err != nil {
+		t.Fatalf("failed to insert account identity: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO watched_containers (account_id, provider_code, external_container_id)
+		VALUES ($1, $2, $3)
+	`, accountID, "mello", "board-789")
+	if err != nil {
+		t.Fatalf("failed to insert watched container: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO runtimes (account_id, code, label, token_lookup)
+		VALUES ($1, $2, $3, $4)
+	`, accountID, "dev", "Dev Machine", "lookup-hash-rt3")
+	if err != nil {
+		t.Fatalf("failed to insert runtime: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO profiles (account_id, name, body)
+		VALUES ($1, $2, $3)
+	`, accountID, "dev", "legacy path profile")
+	if err != nil {
+		t.Fatalf("failed to insert profile: %v", err)
+	}
+
+	mockMello := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/tickets/ticket-999" {
+			ticket := mello.TicketDetail{
+				Ticket: mello.Ticket{
+					ID:          "ticket-999",
+					Title:       "Legacy Path Ticket",
+					Description: "Legacy Desc",
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(ticket)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer mockMello.Close()
+
+	adapter := melloprovider.NewMelloAdapter(mockMello.URL)
+	provider.Register(adapter)
+
+	spy := &spyBroker{}
+	featureFlag := channel.NewFeatureFlag(false) // Feature flag OFF
+
+	// Construct handler with feature flag disabled (legacy path)
+	handler := NewHandler(pool, spy, secretKey, mockMello.URL, featureFlag)
+
+	r := chi.NewRouter()
+	r.Post("/webhooks/{provider}", handler.ServeHTTP)
+
+	validPayload := []byte(`{
+		"id": "event-201",
+		"type": "comment.added",
+		"actor": { "id": "user-456", "name": "Alice" },
+		"model": { "type": "ticket", "board_id": "board-789" },
+		"data": { "id": "comment-leg", "body": "@mework dev review fix the bug", "ticket_id": "ticket-999" }
+	}`)
+
+	ts := fmt.Sprintf("%d", time.Now().Unix())
+	mac := hmac.New(sha256.New, []byte(webhookSecret))
+	mac.Write([]byte(ts))
+	mac.Write([]byte("."))
+	mac.Write(validPayload)
+	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(validPayload)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Mello-Signature", sig)
+	req.Header.Set("X-Mello-Timestamp", ts)
+	req.Header.Set("X-Mello-Delivery-Id", "delivery-uuid-leg-1")
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// With feature flag off, should publish to runner.dev.dispatch (legacy path)
+	expectedTopic := bus.FormatTopic(bus.TopicRunnerDispatch, "dev")
+	topics := spy.topics()
+	found := false
+	for _, t := range topics {
+		if t == expectedTopic {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected legacy publish to topic %s, got topics: %v", expectedTopic, topics)
+	}
+}
+
+// TestWebhookHandler_ChannelKeyComputation verifies that the webhook handler
+// correctly computes the channel key via the adapter's ChannelKey method.
+func TestWebhookHandler_ChannelKeyComputation(t *testing.T) {
+	// This test verifies the adapter's ChannelKey returns the correct tuple
+	// for a Mello webhook payload, independent of the handler.
+	adapter := melloprovider.NewMelloAdapter("")
+
+	tests := []struct {
+		name       string
+		payload    []byte
+		wantCode   string
+		wantResID  string
+	}{
+		{
+			name:       "standard mello webhook with ticket_id",
+			payload:    []byte(`{"id":"evt_1","type":"comment.added","data":{"ticket_id":"TICKET-99"}}`),
+			wantCode:   "mello",
+			wantResID:  "TICKET-99",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// ChannelKey is called via the Provider interface
+			var prov provider.Provider = adapter
+			code, resID := prov.ChannelKey(tt.payload)
+			if code != tt.wantCode {
+				t.Errorf("ChannelKey code = %q, want %q", code, tt.wantCode)
+			}
+			if resID != tt.wantResID {
+				t.Errorf("ChannelKey resourceID = %q, want %q", resID, tt.wantResID)
+			}
+		})
+	}
 }

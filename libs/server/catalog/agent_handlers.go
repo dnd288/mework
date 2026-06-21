@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -85,6 +86,17 @@ func (h *AgentHandlers) PublishVersion(w http.ResponseWriter, r *http.Request) {
 		payload = []byte(req.Payload)
 	case "image":
 		reference = req.Reference
+	case "bundle":
+		decoded, err := base64.StdEncoding.DecodeString(req.Payload)
+		if err != nil {
+			http.Error(w, "Bad Request: invalid base64 payload: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		payload = decoded
+		if err := validateBundle(payload); err != nil {
+			http.Error(w, "Bad Request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 	default:
 		http.Error(w, "Bad Request: unsupported form '"+req.Form+"'", http.StatusBadRequest)
 		return
@@ -323,6 +335,11 @@ func (h *AgentHandlers) versionContent(v *AgentVersion) map[string]any {
 			"form":    "image",
 			"content": v.Reference,
 		}
+	case "bundle":
+		return map[string]any{
+			"form":    "bundle",
+			"content": base64.StdEncoding.EncodeToString(v.Payload),
+		}
 	default:
 		return map[string]any{
 			"form":    "definition",
@@ -333,8 +350,9 @@ func (h *AgentHandlers) versionContent(v *AgentVersion) map[string]any {
 
 // DispatchRequest is the JSON body for the dispatch HTTP endpoint.
 type DispatchRequest struct {
-	Target string           `json:"target"`
-	Grant  *json.RawMessage `json:"grant,omitempty"`
+	Target     string           `json:"target"`
+	Grant      *json.RawMessage `json:"grant,omitempty"`
+	ChannelKey string           `json:"channel_key,omitempty"`
 }
 
 // Dispatch handles POST /api/v1/agents/{name}/dispatch.
@@ -381,9 +399,16 @@ func (h *AgentHandlers) Dispatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.DispatchToRunner(r.Context(), name, req.Target, g); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if req.ChannelKey != "" {
+		if err := h.DispatchToRunnerWithChannel(r.Context(), name, req.Target, g, req.ChannelKey); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := h.DispatchToRunner(r.Context(), name, req.Target, g); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Record audit entry for dispatch.

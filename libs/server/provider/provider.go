@@ -25,6 +25,7 @@ type Provider interface {
 	VerifyWebhook(body []byte, timestamp string, signature string, secret string) error
 	ParseEvent(payload []byte) (*CanonicalEvent, error)
 	WriteBack(ctx context.Context, token string, taskID string, body string) error
+	ChannelKey(rawPayload []byte) (providerCode string, resourceID string)
 }
 
 var (

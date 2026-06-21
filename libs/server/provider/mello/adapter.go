@@ -126,3 +126,17 @@ func (a *MelloAdapter) WriteBack(ctx context.Context, token string, taskID strin
 	_, err := client.CreateComment(taskID, body)
 	return err
 }
+
+// ChannelKey extracts the provider code and resource ID from a Mello webhook
+// payload. The resource ID is the ticket_id from the data section.
+func (a *MelloAdapter) ChannelKey(rawPayload []byte) (string, string) {
+	var p struct {
+		Data struct {
+			TicketID string `json:"ticket_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rawPayload, &p); err != nil {
+		return "mello", ""
+	}
+	return "mello", p.Data.TicketID
+}

@@ -1,6 +1,9 @@
 package bus
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	// TopicRunnerDispatch is the topic template for dispatching a runner.
@@ -18,6 +21,18 @@ const (
 // FormatTopic substitutes %s in the template with the given id.
 func FormatTopic(tmpl string, id string) Topic {
 	return Topic(strings.Replace(tmpl, "%s", id, 1))
+}
+
+// FormatChannelTopic formats a channel event topic from its components.
+// Produces "channel.<providerCode>.<resourceID>.<eventType>".
+func FormatChannelTopic(providerCode, resourceID, eventType string) Topic {
+	return Topic(fmt.Sprintf("channel.%s.%s.%s", providerCode, resourceID, eventType))
+}
+
+// TopicChannelEvent is a helper to format a channel event topic string.
+// Identical to FormatChannelTopic; provided for parallel naming.
+func TopicChannelEvent(providerCode, resourceID, eventType string) Topic {
+	return FormatChannelTopic(providerCode, resourceID, eventType)
 }
 
 // MatchTopic reports whether the pattern matches the actual topic name.

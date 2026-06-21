@@ -46,6 +46,17 @@ func (h *AgentHandlers) agentExists(ctx context.Context, name string) (bool, err
 
 // DispatchToRunner publishes a dispatch message to the target runner's topic.
 func (h *AgentHandlers) DispatchToRunner(ctx context.Context, agentName, runnerID string, g *grant.Grant) error {
+	return h.dispatch(ctx, agentName, "", runnerID, g, "")
+}
+
+// DispatchToRunnerWithChannel publishes a dispatch message with channel context
+// so the worker can subscribe to the correct channel topic.
+func (h *AgentHandlers) DispatchToRunnerWithChannel(ctx context.Context, agentName, runnerID string, g *grant.Grant, channelKey string) error {
+	return h.dispatch(ctx, agentName, "", runnerID, g, channelKey)
+}
+
+// dispatch is the shared implementation for dispatching an agent to a runner.
+func (h *AgentHandlers) dispatch(ctx context.Context, agentName, version, runnerID string, g *grant.Grant, channelKey string) error {
 	if g == nil {
 		return fmt.Errorf("dispatch requires a grant")
 	}
@@ -62,15 +73,19 @@ func (h *AgentHandlers) DispatchToRunner(ctx context.Context, agentName, runnerI
 	}
 
 	agentRef := transport.AgentRef{Name: agentName}
+	if version != "" {
+		agentRef.Version = version
+	}
 	grantJSON, err := json.Marshal(g)
 	if err != nil {
 		return fmt.Errorf("marshal grant: %w", err)
 	}
 
 	msg := transport.Dispatch{
-		Agent:  agentRef,
-		Grant:  grantJSON,
-		Runner: runnerID,
+		Agent:      agentRef,
+		Grant:      grantJSON,
+		Runner:     runnerID,
+		ChannelKey: channelKey,
 	}
 
 	payload, err := json.Marshal(msg)
@@ -84,38 +99,10 @@ func (h *AgentHandlers) DispatchToRunner(ctx context.Context, agentName, runnerI
 
 // DispatchVersionToRunner publishes a dispatch message for a specific agent version.
 func (h *AgentHandlers) DispatchVersionToRunner(ctx context.Context, agentName, version, runnerID string, g *grant.Grant) error {
-	if g == nil {
-		return fmt.Errorf("dispatch requires a grant")
-	}
-	if agentName == "" {
-		return fmt.Errorf("agent name is required")
-	}
+	return h.dispatch(ctx, agentName, version, runnerID, g, "")
+}
 
-	exists, err := h.agentExists(ctx, agentName)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return ErrNotFound
-	}
-
-	agentRef := transport.AgentRef{Name: agentName, Version: version}
-	grantJSON, err := json.Marshal(g)
-	if err != nil {
-		return fmt.Errorf("marshal grant: %w", err)
-	}
-
-	msg := transport.Dispatch{
-		Agent:  agentRef,
-		Grant:  grantJSON,
-		Runner: runnerID,
-	}
-
-	payload, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("marshal dispatch: %w", err)
-	}
-
-	topic := bus.FormatTopic(bus.TopicRunnerDispatch, runnerShortName(runnerID))
-	return h.broker.Publish(ctx, topic, bus.Message{Payload: payload})
+// DispatchVersionToRunnerWithChannel publishes a dispatch for a specific version with channel context.
+func (h *AgentHandlers) DispatchVersionToRunnerWithChannel(ctx context.Context, agentName, version, runnerID string, g *grant.Grant, channelKey string) error {
+	return h.dispatch(ctx, agentName, version, runnerID, g, channelKey)
 }

@@ -23,7 +23,7 @@ build-mework-server:
 
 server: build-mework-server
 
-MODULES := shared server client sandbox tests tools
+MODULES := libs/shared libs/server libs/client libs/sandbox libs/tests libs/tools
 
 test:
 	@for mod in $(MODULES); do \

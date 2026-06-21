@@ -33,8 +33,9 @@ func callerTenant(r *http.Request) Tenant {
 }
 
 type CreateRuntimeRequest struct {
-	Code  string `json:"code"`
-	Label string `json:"label"`
+	Code  string   `json:"code"`
+	Label string   `json:"label"`
+	Specs []string `json:"specs,omitempty"`
 }
 
 type CreateRuntimeResponse struct {
@@ -55,7 +56,7 @@ func (h *Handlers) CreateRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rt, tok, err := h.service.CreateRuntime(r.Context(), callerTenant(r), accountID, req.Code, req.Label)
+	rt, tok, err := h.service.CreateRuntime(r.Context(), callerTenant(r), accountID, req.Code, req.Label, req.Specs...)
 	if err != nil {
 		if errors.Is(err, ErrDuplicateCode) {
 			http.Error(w, err.Error(), http.StatusConflict)

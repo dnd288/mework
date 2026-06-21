@@ -17,6 +17,7 @@ var (
 	ErrDuplicateCode            = errors.New("runtime code already registered for this account")
 	ErrNotFound                 = errors.New("runtime not found")
 	ErrInvalidRegistrationToken = errors.New("invalid registration token")
+	ErrInvalidSpec              = errors.New("unknown spec: not found in agent catalog")
 )
 
 // DefaultTenantID is the fixed tenant every pre-existing row is backfilled to by the
@@ -40,6 +41,7 @@ type Runtime struct {
 	Label      string     `json:"label"`
 	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 	Status     string     `json:"status"`
+	Specs      []string   `json:"specs,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
 }
 
@@ -149,10 +151,40 @@ func (s *Service) EnrollRunner(ctx context.Context, rawToken, accountID, code, l
 	return rt, nil
 }
 
+// EnrollRunnerWithSpecs is like EnrollRunner but also accepts an optional list
+// of agent specs. Unknown specs are rejected with ErrInvalidSpec BEFORE the
+// registration token is checked, so callers get clear validation errors even
+// without a valid token.
+func (s *Service) EnrollRunnerWithSpecs(ctx context.Context, rawToken, accountID, code, label string, specs []string) (*Runtime, error) {
+	// Validate specs against the agent catalog before token lookup.
+	for _, sp := range specs {
+		var exists bool
+		err := s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM agents WHERE name = $1)", sp).Scan(&exists)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, ErrInvalidSpec
+		}
+	}
+
+	rec, err := s.LookupRegistrationToken(ctx, rawToken)
+	if err != nil {
+		return nil, err
+	}
+
+	rt, _, err := s.CreateRuntime(ctx, Tenant{ID: rec.TenantID}, accountID, code, label, specs...)
+	if err != nil {
+		return nil, err
+	}
+	return rt, nil
+}
+
 // CreateRuntime registers a new runtime under the given tenant and returns its
 // plaintext token. The runtime is stamped with the caller's TenantID so it is
 // only ever visible within that tenant's boundary.
-func (s *Service) CreateRuntime(ctx context.Context, tenant Tenant, accountID, code, label string) (*Runtime, string, error) {
+// Optional specs parameter declares the agent specs this runner supports.
+func (s *Service) CreateRuntime(ctx context.Context, tenant Tenant, accountID, code, label string, specs ...string) (*Runtime, string, error) {
 	if code == "" || label == "" {
 		return nil, "", errors.New("code and label are required")
 	}
@@ -165,13 +197,23 @@ func (s *Service) CreateRuntime(ctx context.Context, tenant Tenant, accountID, c
 	tokenLookup := token.ComputeLookup(rawToken, s.serverKey)
 
 	var rt Runtime
-	err = s.pool.QueryRow(ctx, `
-		INSERT INTO runtimes (tenant_id, account_id, code, label, token_lookup)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, tenant_id, account_id, code, label, last_seen_at, status, created_at
-	`, tenant.ID, accountID, code, label, tokenLookup).Scan(
-		&rt.ID, &rt.TenantID, &rt.AccountID, &rt.Code, &rt.Label, &rt.LastSeenAt, &rt.Status, &rt.CreatedAt,
-	)
+	if len(specs) > 0 {
+		err = s.pool.QueryRow(ctx, `
+			INSERT INTO runtimes (tenant_id, account_id, code, label, token_lookup, specs)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id, tenant_id, account_id, code, label, last_seen_at, status, created_at, specs
+		`, tenant.ID, accountID, code, label, tokenLookup, specs).Scan(
+			&rt.ID, &rt.TenantID, &rt.AccountID, &rt.Code, &rt.Label, &rt.LastSeenAt, &rt.Status, &rt.CreatedAt, &rt.Specs,
+		)
+	} else {
+		err = s.pool.QueryRow(ctx, `
+			INSERT INTO runtimes (tenant_id, account_id, code, label, token_lookup)
+			VALUES ($1, $2, $3, $4, $5)
+			RETURNING id, tenant_id, account_id, code, label, last_seen_at, status, created_at, specs
+		`, tenant.ID, accountID, code, label, tokenLookup).Scan(
+			&rt.ID, &rt.TenantID, &rt.AccountID, &rt.Code, &rt.Label, &rt.LastSeenAt, &rt.Status, &rt.CreatedAt, &rt.Specs,
+		)
+	}
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -190,7 +232,7 @@ func (s *Service) CreateRuntime(ctx context.Context, tenant Tenant, accountID, c
 // share the default tenant during migration do not observe each other's runtimes).
 func (s *Service) ListRunners(ctx context.Context, tenant Tenant, accountID string) ([]Runtime, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, tenant_id, account_id, code, label, last_seen_at, status, created_at
+		SELECT id, tenant_id, account_id, code, label, last_seen_at, status, created_at, specs
 		FROM runtimes
 		WHERE tenant_id = $1 AND account_id = $2
 		ORDER BY created_at DESC
@@ -203,7 +245,7 @@ func (s *Service) ListRunners(ctx context.Context, tenant Tenant, accountID stri
 	var runtimes []Runtime
 	for rows.Next() {
 		var rt Runtime
-		err := rows.Scan(&rt.ID, &rt.TenantID, &rt.AccountID, &rt.Code, &rt.Label, &rt.LastSeenAt, &rt.Status, &rt.CreatedAt)
+		err := rows.Scan(&rt.ID, &rt.TenantID, &rt.AccountID, &rt.Code, &rt.Label, &rt.LastSeenAt, &rt.Status, &rt.CreatedAt, &rt.Specs)
 		if err != nil {
 			return nil, err
 		}
@@ -231,4 +273,34 @@ func (s *Service) DeleteRuntime(ctx context.Context, tenant Tenant, accountID, i
 	}
 
 	return nil
+}
+
+// UpdateRuntimeSpecs updates the specs column of a runtime. Used by the heartbeat
+// handler so a runner can update its declared agent spec capabilities at runtime.
+func (s *Service) UpdateRuntimeSpecs(ctx context.Context, runtimeID string, specs []string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE runtimes SET specs = $1 WHERE id = $2`, specs, runtimeID)
+	return err
+}
+
+// SelectWorker selects an online runner that matches the given spec. Among matching
+// runners it picks the one with the fewest active channel bindings (load-balanced).
+// Returns ErrNotFound if no eligible runner is online.
+func (s *Service) SelectWorker(ctx context.Context, spec string, tenant Tenant) (*Runtime, error) {
+	var rt Runtime
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, tenant_id, account_id, code, label, last_seen_at, status, created_at, specs
+		FROM runtimes
+		WHERE tenant_id = $1 AND (specs @> ARRAY[$2] OR specs IS NULL)
+		ORDER BY (SELECT count(*) FROM channel_sessions WHERE runner_id = runtimes.id::text AND status = 'active'), code DESC
+		LIMIT 1
+	`, tenant.ID, spec).Scan(
+		&rt.ID, &rt.TenantID, &rt.AccountID, &rt.Code, &rt.Label, &rt.LastSeenAt, &rt.Status, &rt.CreatedAt, &rt.Specs,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &rt, nil
 }

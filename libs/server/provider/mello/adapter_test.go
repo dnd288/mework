@@ -76,3 +76,75 @@ func TestParseEvent(t *testing.T) {
 		t.Errorf("unexpected body: %s", ev.Body)
 	}
 }
+
+func TestMelloAdapter_ChannelKey(t *testing.T) {
+	adapter := NewMelloAdapter("")
+
+	tests := []struct {
+		name        string
+		payload     []byte
+		wantCode    string
+		wantResID   string
+	}{
+		{
+			name:        "valid payload with ticket_id",
+			payload:     []byte(`{"id":"evt_1","type":"comment.added","data":{"ticket_id":"TICKET-99"}}`),
+			wantCode:    "mello",
+			wantResID:   "TICKET-99",
+		},
+		{
+			name:        "payload with different ticket_id",
+			payload:     []byte(`{"id":"evt_2","type":"comment.added","data":{"ticket_id":"PROJ-42"}}`),
+			wantCode:    "mello",
+			wantResID:   "PROJ-42",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, resID := adapter.ChannelKey(tt.payload)
+			if code != tt.wantCode {
+				t.Errorf("ChannelKey code = %q, want %q", code, tt.wantCode)
+			}
+			if resID != tt.wantResID {
+				t.Errorf("ChannelKey resourceID = %q, want %q", resID, tt.wantResID)
+			}
+		})
+	}
+}
+
+func TestMelloAdapter_ChannelKey_NoTicketID(t *testing.T) {
+	adapter := NewMelloAdapter("")
+
+	tests := []struct {
+		name      string
+		payload   []byte
+		wantCode  string
+		wantResID string
+	}{
+		{
+			name:      "payload without data field",
+			payload:   []byte(`{}`),
+			wantCode:  "mello",
+			wantResID: "",
+		},
+		{
+			name:      "payload with empty ticket_id",
+			payload:   []byte(`{"data":{"ticket_id":""}}`),
+			wantCode:  "mello",
+			wantResID: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, resID := adapter.ChannelKey(tt.payload)
+			if code != tt.wantCode {
+				t.Errorf("ChannelKey code = %q, want %q", code, tt.wantCode)
+			}
+			if resID != tt.wantResID {
+				t.Errorf("ChannelKey resourceID = %q, want %q", resID, tt.wantResID)
+			}
+		})
+	}
+}

@@ -118,6 +118,34 @@ func TestMigrations(t *testing.T) {
 	assertIndexDefContains(t, ctx, conn, "idx_jobs_writeback", "writeback_status")
 	assertIndexDefContains(t, ctx, conn, "idx_jobs_writeback", "pending")
 
+	// ---- Channel Routing migration (000009) ----
+	// Verify specs column on runtimes
+	assertColumnExists(t, ctx, conn, "runtimes", "specs")
+
+	// Verify channel_sessions table and columns
+	assertTableExists(t, ctx, conn, "channel_sessions")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "channel_key")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "session_id")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "provider_code")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "resource_id")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "runner_id")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "spec")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "status")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "created_at")
+	assertColumnExists(t, ctx, conn, "channel_sessions", "closed_at")
+
+	// Verify indexes on channel_sessions
+	assertIndexExists(t, ctx, conn, "idx_channel_sessions_runner_id")
+	assertIndexExists(t, ctx, conn, "idx_channel_sessions_provider_resource")
+
+	// Verify primary key constraint
+	assertConstraintExists(t, ctx, conn, "channel_sessions", "p", []string{"channel_key"})
+
+	// Verify status CHECK constraint allows active, draining, closed
+	assertConstraintDefContains(t, ctx, conn, "channel_sessions", "channel_sessions_status_check", "active")
+	assertConstraintDefContains(t, ctx, conn, "channel_sessions", "channel_sessions_status_check", "draining")
+	assertConstraintDefContains(t, ctx, conn, "channel_sessions", "channel_sessions_status_check", "closed")
+
 	// 4. Rollback Down
 	err = RollbackMigrations(dsn)
 	if err != nil {
@@ -250,6 +278,23 @@ func assertConstraintExists(t *testing.T, ctx context.Context, conn *pgx.Conn, t
 	}
 	if !exists {
 		t.Errorf("expected constraint %s on table %s with columns %v to exist, but it does not", conType, tableName, columns)
+	}
+}
+
+func assertConstraintDefContains(t *testing.T, ctx context.Context, conn *pgx.Conn, tableName, constraintName, expectedPart string) {
+	t.Helper()
+	var def string
+	query := `SELECT pg_get_constraintdef(c.oid)
+		FROM pg_constraint c
+		JOIN pg_class t ON c.conrelid = t.oid
+		JOIN pg_namespace n ON t.relnamespace = n.oid
+		WHERE n.nspname = 'public' AND t.relname = $1 AND c.conname = $2`
+	err := conn.QueryRow(ctx, query, tableName, constraintName).Scan(&def)
+	if err != nil {
+		t.Fatalf("query failed fetching constraint def for %s on %s: %v", constraintName, tableName, err)
+	}
+	if !strings.Contains(def, expectedPart) {
+		t.Errorf("expected constraint %s on %s to contain %q, but got %q", constraintName, tableName, expectedPart, def)
 	}
 }
 

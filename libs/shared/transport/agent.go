@@ -8,6 +8,7 @@ type Form string
 const (
 	FormDefinition Form = "definition"
 	FormImage      Form = "image"
+	FormBundle     Form = "bundle"
 )
 
 // AgentRef identifies an agent and optionally a specific version.
@@ -33,8 +34,9 @@ type Artifact struct {
 
 // Dispatch is a message published to a runner's dispatch topic.
 type Dispatch struct {
-	Agent   AgentRef         `json:"agent"`
-	Grant   json.RawMessage  `json:"grant"`
-	Session string           `json:"session,omitempty"`
-	Runner  string           `json:"runner"`
+	Agent      AgentRef         `json:"agent"`
+	Grant      json.RawMessage  `json:"grant"`
+	Session    string           `json:"session,omitempty"`
+	Runner     string           `json:"runner"`
+	ChannelKey string           `json:"channel_key,omitempty"`
 }

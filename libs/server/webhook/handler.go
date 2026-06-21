@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -19,22 +20,39 @@ import (
 	"mework/libs/shared/providers/mello"
 )
 
+type channelRouter interface {
+	Route(ctx context.Context, providerCode, resourceID, eventType string, payload []byte) error
+}
+
+type featureChecker interface {
+	IsEnabled() bool
+}
+
 type Handler struct {
 	pool          *pgxpool.Pool
 	broker        bus.Broker
 	secretKey     string
 	melloBaseURL  string
 	connectionSvc *connection.Service
+	channelR      channelRouter
+	featureC      featureChecker
 }
 
-func NewHandler(pool *pgxpool.Pool, broker bus.Broker, secretKey string, melloBaseURL string) *Handler {
-	return &Handler{
+func NewHandler(pool *pgxpool.Pool, broker bus.Broker, secretKey string, melloBaseURL string, extra any) *Handler {
+	h := &Handler{
 		pool:          pool,
 		broker:        broker,
 		secretKey:     secretKey,
 		melloBaseURL:  melloBaseURL,
 		connectionSvc: connection.NewService(pool, secretKey),
 	}
+	if router, ok := extra.(channelRouter); ok {
+		h.channelR = router
+	}
+	if fc, ok := extra.(featureChecker); ok {
+		h.featureC = fc
+	}
+	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -210,25 +228,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Parse custom workflow instructions if workflowName was parsed
 	finalInstructions := instructions
-	if workflowName != "" {
-		// Store it in config/workflow if needed. But for instructions,
-		// the trigger grammar maps it to the prompt.
-		// Wait, how does the prompt snapshot work?
-		// We just pass finalInstructions = instructions.
-	}
 
-	// 13. Publish dispatch message to the bus
-	topic := bus.FormatTopic(bus.TopicRunnerDispatch, profileName)
+	// Build message payload shared by both routing paths.
 	msgPayload, err := json.Marshal(map[string]interface{}{
-		"runtime_id":          runtimeID,
-		"external_task_id":    ev.ExternalTaskID,
-		"provider_code":       providerCode,
-		"external_actor_id":   ev.Actor.ID,
-		"task_title":          ticket.Title,
-		"task_description":    ticket.Description,
+		"runtime_id":            runtimeID,
+		"external_task_id":      ev.ExternalTaskID,
+		"provider_code":         providerCode,
+		"external_actor_id":     ev.Actor.ID,
+		"task_title":            ticket.Title,
+		"task_description":      ticket.Description,
 		"profile_body_snapshot": profileBodySnapshot,
-		"workflow":            workflowName,
-		"instructions":        finalInstructions,
+		"workflow":              workflowName,
+		"instructions":          finalInstructions,
 	})
 	if err != nil {
 		log.Printf("Failed to marshal message payload: %v", err)
@@ -236,6 +247,36 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 13. Channel routing path (new): if a channel router is available and
+	// the feature flag is enabled, route through the channel router instead
+	// of publishing to runner.<profile>.dispatch.
+	if h.channelR != nil && h.featureC != nil && h.featureC.IsEnabled() {
+		provCode, resourceID := prov.ChannelKey(bodyBytes)
+		err := h.channelR.Route(r.Context(), provCode, resourceID, "dispatch", msgPayload)
+		if err == nil {
+			// Route succeeded — skip the legacy publish path.
+			// Still enqueue a job row for state tracking (best-effort).
+			_, _ = orchestrator.Enqueue(r.Context(), h.pool, orchestrator.EnqueueParams{
+				AccountID:           accountID,
+				RuntimeID:           runtimeID,
+				ExternalTaskID:      ev.ExternalTaskID,
+				ExternalEventID:     deliveryID,
+				ProviderCode:        providerCode,
+				ExternalActorID:     ev.Actor.ID,
+				TaskTitle:           ticket.Title,
+				TaskDescription:     ticket.Description,
+				ProfileBodySnapshot: profileBodySnapshot,
+				Workflow:            workflowName,
+				Instructions:        finalInstructions,
+			})
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		log.Printf("Channel routing failed, falling through to legacy path: %v", err)
+	}
+
+	// 14. Legacy publish path: publish to runner.<profile>.dispatch.
+	topic := bus.FormatTopic(bus.TopicRunnerDispatch, profileName)
 	err = h.broker.Publish(r.Context(), topic, bus.Message{Payload: msgPayload})
 	if err != nil {
 		log.Printf("Failed to publish dispatch message: %v", err)

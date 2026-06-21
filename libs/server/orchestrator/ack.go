@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -20,6 +21,10 @@ type AckRequest struct {
 	Status        string  `json:"status"`
 	ResultSummary *string `json:"result_summary,omitempty"`
 	LastError     *string `json:"last_error,omitempty"`
+}
+
+type HeartbeatRequest struct {
+	Specs []string `json:"specs,omitempty"`
 }
 
 type AckHandlers struct {
@@ -174,7 +179,26 @@ func (h *AckHandlers) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Extend claim lease until NOW() + 90 seconds
+	// 2. Decode optional heartbeat body (specs update)
+	var hbReq HeartbeatRequest
+	if err := json.NewDecoder(r.Body).Decode(&hbReq); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, "Bad Request: invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// 3. Update runtime specs if provided
+	if hbReq.Specs != nil {
+		_, err = h.pool.Exec(r.Context(), `
+			UPDATE runtimes SET specs = $1 WHERE id = $2
+		`, hbReq.Specs, runtimeID)
+		if err != nil {
+			logError("Failed to update runtime specs from heartbeat", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// 4. Extend claim lease until NOW() + 90 seconds
 	_, err = h.pool.Exec(r.Context(), `
 		UPDATE jobs
 		SET claim_lease_until = NOW() + INTERVAL '90 seconds'

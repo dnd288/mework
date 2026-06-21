@@ -215,3 +215,73 @@ func TestExecuteWriteBack(t *testing.T) {
 		t.Error("expected mock Mello server to receive write-back comment, but it was not called")
 	}
 }
+
+// --- Unit 03: Channel-session writeback tests ---
+
+// TestWriteBackFromChannelSession verifies write-back resolves the provider
+// connection from a channel session context.
+// RED: LookupChannelSession and ExecuteWriteBackFromChannel are not yet implemented.
+func TestWriteBackFromChannelSession(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// ChannelSession and LookupChannelSession do not exist yet.
+	// This test is the RED assertion for the channel-session writeback path.
+	channelKey := "mello:TICKET-99"
+	session, err := LookupChannelSession(ctx, nil, channelKey)
+	if err != nil {
+		t.Fatalf("LookupChannelSession failed: %v", err)
+	}
+	if session == nil {
+		t.Fatal("expected non-nil ChannelSession")
+	}
+	if session.ProviderCode != "mello" {
+		t.Errorf("ProviderCode = %q, want %q", session.ProviderCode, "mello")
+	}
+	if session.AccountID == "" {
+		t.Error("expected non-empty AccountID in channel session")
+	}
+}
+
+// TestWriteBackNoTokenInSession verifies that channel session context does not
+// carry the raw provider token — only account_id and provider_code.
+// RED: ChannelSession type is not yet defined.
+func TestWriteBackNoTokenInSession(t *testing.T) {
+	session := ChannelSession{
+		ChannelKey:   "mello:TICKET-99",
+		SessionID:    "s_abc123",
+		ProviderCode: "mello",
+		AccountID:    "acct_1",
+		ResourceID:   "TICKET-99",
+	}
+	// Assert no provider token field exists on the struct.
+	tokenField, hasTokenField := structFieldByName(session, "ProviderToken")
+	if hasTokenField {
+		t.Error("ChannelSession should not expose ProviderToken — worker must never hold provider credentials")
+	}
+	_ = tokenField
+}
+
+// TestWriteBackFromChannel_FullFlow exercises the full channel-session write-back
+// path: setup DB, insert channel session, call ExecuteWriteBackFromChannel.
+// RED: ExecuteWriteBackFromChannel is not yet implemented.
+func TestWriteBackFromChannel_FullFlow(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// ExecuteWriteBackFromChannel does not exist yet — RED compile failure.
+	err := ExecuteWriteBackFromChannel(ctx, nil, "test-key", "http://localhost:9999", "mello:TICKET-99", "job completed")
+	if err != nil {
+		t.Fatalf("ExecuteWriteBackFromChannel failed: %v", err)
+	}
+}
