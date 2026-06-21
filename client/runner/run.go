@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"time"
@@ -9,11 +10,13 @@ import (
 	"mework/client/subscribe"
 	"mework/sandbox/agent"
 	"mework/sandbox/engine/local"
+	"mework/server/bus"
 	"mework/shared/config"
 )
 
-// Run is the daemon's main loop: poll the mework-server claim API,
-// run the AI agent, heartbeat during run, and ack completion.
+// Run is the daemon's main loop: subscribe to the SSE message bus for the
+// given profile's dispatch topic, run the AI agent on received jobs, and ack
+// completion.
 func Run(ctx context.Context, profile string, cfg *config.Config) error {
 	if cfg.ServerURL == "" {
 		return errors.New("server_url is not set in config; please configure it first")
@@ -31,44 +34,73 @@ func Run(ctx context.Context, profile string, cfg *config.Config) error {
 
 	client := subscribe.NewClient(cfg.ServerURL, 10*time.Second)
 
-	pollInterval := 5 * time.Second
-	if cfg.Daemon.PollIntervalSeconds > 0 {
-		pollInterval = time.Duration(cfg.Daemon.PollIntervalSeconds) * time.Second
-	}
-
-	log.Printf("daemon polling server %s every %s", cfg.ServerURL, pollInterval)
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
+	topic := bus.FormatTopic(bus.TopicRunnerDispatch, profile)
+	var lastEventID string
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("daemon stopping")
 			return nil
-		case <-ticker.C:
+		default:
+		}
+
+		if !ok {
+			backend, ok = agent.Detect(cfg.Daemon.Backends)
 			if !ok {
-				backend, ok = agent.Detect(cfg.Daemon.Backends)
-				if !ok {
-					continue
+				// No backend detected; wait before retry.
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(5 * time.Second):
 				}
-				log.Printf("detected AI backend %s (%s)", backend.Name, backend.Path)
+				continue
 			}
+			log.Printf("detected AI backend %s (%s)", backend.Name, backend.Path)
+		}
 
-			job, err := client.Claim(cfg.RuntimeToken)
-			if err != nil {
-				log.Printf("error claiming job: %v. Retrying in next cycle...", err)
+		log.Printf("subscribing to topic %s (last_event_id=%q)", topic, lastEventID)
+		stream, err := client.Subscribe(cfg.RuntimeToken, []string{string(topic)}, lastEventID)
+		if err != nil {
+			log.Printf("error subscribing: %v", err)
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(time.Second):
+			}
+			continue
+		}
+
+		log.Printf("connected to SSE stream for %s", profile)
+
+	eventLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				stream.Close()
+				log.Println("daemon stopping")
+				return nil
+			case event, ok := <-stream.Events():
+				if !ok {
+					// Stream closed by server; reconnect.
+					break eventLoop
+				}
+			log.Printf("received event %s on topic %s", event.ID, event.Topic)
+
+			// Deserialize job from the event payload.
+			var job subscribe.Job
+			if err := json.Unmarshal(event.Message.Payload, &job); err != nil {
+				log.Printf("error deserializing job from event %s: %v", event.ID, err)
+				lastEventID = event.ID
 				continue
 			}
 
-			if job == nil {
-				continue
-			}
-
-			log.Printf("claimed job %s for task %s", job.ID, job.ExternalTaskID)
+			log.Printf("processing job %s for task %s", job.ID, job.ExternalTaskID)
 
 			// Transition to running
 			if err := client.Ack(cfg.RuntimeToken, job.ID, "running", "", ""); err != nil {
 				log.Printf("error acking running status for job %s: %v", job.ID, err)
+				lastEventID = event.ID
 				continue
 			}
 
@@ -76,7 +108,7 @@ func Run(ctx context.Context, profile string, cfg *config.Config) error {
 			stopHeartbeat := startHeartbeat(ctx, client, cfg.RuntimeToken, job.ID, 30*time.Second)
 
 			// Prepare prompt
-			prompt := buildPrompt(job)
+			prompt := buildPrompt(&job)
 			workDir := local.WorkDir(config.ProfileDir(profile), job.ID)
 
 			// Execute AI agent
@@ -99,7 +131,24 @@ func Run(ctx context.Context, profile string, cfg *config.Config) error {
 			} else {
 				log.Printf("job %s completed (status=%s)", job.ID, status)
 			}
+
+			// Ack the SSE message (delivery acknowledgement).
+			if err := client.AckMessage(cfg.RuntimeToken, event.ID); err != nil {
+				log.Printf("error acking message %s: %v", event.ID, err)
+			}
+
+			lastEventID = event.ID
 		}
+
+		// Stream closed (disconnect or server shutdown). Reconnect with resume.
+		log.Printf("SSE stream disconnected, reconnecting with last_event_id=%q", lastEventID)
+		select {
+		case <-ctx.Done():
+			log.Println("daemon stopping")
+			return nil
+		case <-time.After(time.Second):
+		}
+	}
 	}
 }
 

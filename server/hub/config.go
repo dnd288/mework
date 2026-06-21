@@ -3,6 +3,8 @@ package hub
 import (
 	"errors"
 	"os"
+
+	"mework/server/bus"
 )
 
 // Config holds the environment configuration for the mework server.
@@ -13,6 +15,12 @@ type Config struct {
 	ServerKey       string
 	MeworkSecretKey string
 	MelloBaseURL    string
+
+	// Broker is an optional pre-configured message bus broker. When nil,
+	// NewServer creates a default in-memory broker. Tests that need to
+	// share a broker between the server and a client harness set this
+	// to the same broker instance.
+	Broker bus.Broker
 }
 
 // LoadConfig loads the configuration from environment variables.

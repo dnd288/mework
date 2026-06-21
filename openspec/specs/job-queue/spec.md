@@ -11,50 +11,27 @@ state machine, and a background sweeper that recovers leases. Owned by
 
 ### Requirement: Transactional state machine
 
-The system SHALL enforce job status transitions inside a transaction with row
-locking (`SELECT ... FOR UPDATE`). Allowed transitions are `queued → claimed|failed`,
-`claimed → running|done|failed|queued`, and `running → done|failed|queued`.
-Terminal states (`done`, `failed`) MUST be immutable. A transition to the current
-status MUST be an idempotent no-op. Entering `running` MUST set `started_at`;
-entering `done`/`failed` MUST set `finished_at`.
+The system SHALL enforce in-flight work-item status transitions inside a
+transaction with row locking, with terminal states (`done`, `failed`) immutable
+and same-status transitions idempotent. Under the message bus this state machine
+governs the **durable backing store behind the bus** (the record of a dispatched
+unit of work), **not** a client-facing claim queue. Entering `running` MUST set
+`started_at`; entering `done`/`failed` MUST set `finished_at`.
 
 #### Scenario: Reject a transition out of a terminal state
 
-- **WHEN** a job is `done` and a transition to `running` is attempted
-- **THEN** the system returns an invalid-transition error and leaves the job unchanged
+- **WHEN** a work item is `done` and a transition to `running` is attempted
+- **THEN** the system returns an invalid-transition error and leaves the item unchanged
 
 #### Scenario: Idempotent re-ack
 
 - **WHEN** an ack sets a job to a status it already holds
 - **THEN** the system treats it as a no-op and succeeds
 
-### Requirement: Exactly-once claim
+#### Scenario: State is tracked independently of transport
 
-The system SHALL allow a runtime to claim at most one active job at a time and
-SHALL hand a queued job to exactly one runtime, using row-level locking
-(`FOR UPDATE SKIP LOCKED`) and a partial unique index enforcing one active job
-per runtime.
-
-#### Scenario: Concurrent claims do not double-assign
-
-- **WHEN** two runtimes poll the queue simultaneously for the same queued job
-- **THEN** exactly one claim succeeds and the other receives no job
-
-#### Scenario: One active job per runtime
-
-- **WHEN** a runtime already holds a claimed/running job and attempts to claim another
-- **THEN** the system denies the second claim until the first reaches a terminal state
-
-### Requirement: Heartbeat and lease
-
-The system SHALL accept periodic heartbeats from the claiming runtime to extend a
-job's lease while it runs, and SHALL expose ack endpoints to report `running`,
-`done`, and `failed` outcomes with a result summary.
-
-#### Scenario: Heartbeat extends the lease
-
-- **WHEN** a runtime heartbeats a running job before its lease expires
-- **THEN** the lease is extended and the sweeper does not reclaim the job
+- **WHEN** a work item's status changes
+- **THEN** the change is recorded in the backing store regardless of how the originating message was delivered to the client
 
 ### Requirement: Lease sweeper
 

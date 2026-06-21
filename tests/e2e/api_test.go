@@ -3,11 +3,18 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
 
 	meworkclient "mework/client/subscribe"
+	"mework/server/bus"
 	"mework/server/hub"
 	"mework/server/platform/store"
 	"mework/server/registry"
@@ -682,14 +689,36 @@ type World struct {
 	Grant    Grant
 	Session  Session
 
+	// testing — set by Builder.Run()
+	TB testing.TB
+
+	// run-time wiring — set by NewWorld
+	ServerURL    string // httptest server base URL
+	RuntimeToken string // rt_token for authenticated SSE subscriptions
+	msgBroker    bus.Broker // raw bus.Broker for session PushToSandbox
+
+	// cleanup functions registered during the test, called in LIFO order
+	// before the httptest server is closed.
+	cleanups []func()
+
 	// scratch space shared across steps
 	state map[string]any
 }
 
 func ctx() context.Context { return context.Background() }
 
-func (w *World) set(k string, v any) { /* design stub */ panic("design-only World.set") }
-func (w *World) get(k string) any    { panic("design-only World.get") }
+func (w *World) set(k string, v any) {
+	if w.state == nil {
+		w.state = make(map[string]any)
+	}
+	w.state[k] = v
+}
+func (w *World) get(k string) any {
+	if w.state == nil {
+		return nil
+	}
+	return w.state[k]
+}
 
 // --- today (baseline) harness verbs ---
 func (w *World) StartHub() error                                         { panic("design-only") }
@@ -700,7 +729,63 @@ func (w *World) ConnectProvider(token, secret string)                    { panic
 func (w *World) CreateProfile(name, body, backend, harness string)       { panic("design-only") }
 func (w *World) RegisterRuntime(code, label string) (RunnerID, string)   { panic("design-only") }
 func (w *World) WatchContainer(board string)                             { panic("design-only") }
-func (w *World) PostWebhook(comment, deliveryID string, signed bool) int { panic("design-only") }
+func (w *World) PostWebhook(comment, deliveryID string, signed bool) int {
+	if w.ServerURL == "" || w.TB == nil {
+		panic("design-only: PostWebhook requires a wired httptest server")
+	}
+	if !signed {
+		return w.postUnsigned(comment, deliveryID)
+	}
+	return w.postSigned(comment, deliveryID)
+}
+
+func (w *World) postUnsigned(comment, deliveryID string) int {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"id":   "evt-" + deliveryID,
+		"type": "comment.added",
+		"actor": map[string]string{"id": "mello-user-123", "name": "Test User"},
+		"model": map[string]string{"type": "ticket", "board_id": "board-789"},
+		"data": map[string]string{"id": "comment-uuid-" + deliveryID, "body": comment, "ticket_id": "tkt-999"},
+	})
+	req, _ := http.NewRequest("POST", w.ServerURL+"/webhooks/mello", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.TB.Fatalf("PostWebhook request: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func (w *World) postSigned(comment, deliveryID string) int {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"id":   "evt-" + deliveryID,
+		"type": "comment.added",
+		"actor": map[string]string{"id": "mello-user-123", "name": "Test User"},
+		"model": map[string]string{"type": "ticket", "board_id": "board-789"},
+		"data": map[string]string{"id": "comment-uuid-" + deliveryID, "body": comment, "ticket_id": "tkt-999"},
+	})
+	ts := fmt.Sprintf("%d", time.Now().Unix())
+	// Use the default webhook secret that NewWorld seeds
+	webhookSecret := "test-webhook-secret"
+	mac := hmac.New(sha256.New, []byte(webhookSecret))
+	mac.Write([]byte(ts))
+	mac.Write([]byte("."))
+	mac.Write(payload)
+	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	req, _ := http.NewRequest("POST", w.ServerURL+"/webhooks/mello", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Mello-Signature", sig)
+	req.Header.Set("X-Mello-Timestamp", ts)
+	req.Header.Set("X-Mello-Delivery-Id", deliveryID)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.TB.Fatalf("PostWebhook request: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
 func (w *World) Claim(token string) *Job                                 { panic("design-only") }
 func (w *World) Ack(token, jobID, status, summary string) error          { panic("design-only") }
 func (w *World) Heartbeat(token, jobID string) error                     { panic("design-only") }
@@ -712,19 +797,54 @@ func (w *World) ConfigFileMode() uint32                                  { panic
 func (w *World) DaemonStatus() string                                    { panic("design-only") }
 func (w *World) DetectBackend() AgentBackend                             { panic("design-only") }
 
-// --- target harness verbs ---
-func (w *World) RegisterTenant(name string) Tenant                              { panic("design-only") }
-func (w *World) IssueRegToken(tenant TenantID) string                           { panic("design-only") }
-func (w *World) EnrollRunner(regToken string) (RunnerIdentity, error)           { panic("design-only") }
-func (w *World) OpenSession(id SessionID, filter Filter) Session                { panic("design-only") }
-func (w *World) PublishVersion(name, version string, form Form) Version         { panic("design-only") }
-func (w *World) Dispatch(ref AgentRef, to RunnerID, g Grant) (SessionID, error) { panic("design-only") }
-func (w *World) Subscribe(filter Filter, fromID string) Subscription            { panic("design-only") }
-func (w *World) Publish(topic Topic, kind string) error                         { panic("design-only") }
-func (w *World) FakeAgent(name string, mode string)                             { panic("design-only") }
-func (w *World) Driver(kind DriverKind) SandboxDriver                           { panic("design-only") }
-func (w *World) Backend(name string) AgentBackend                               { panic("design-only") }
-func (w *World) StartRunner() error                                             { panic("design-only") }
+// --- SSE session types for live OpenSession ---
+
+// sseSession wraps an SSE stream subscription as an e2e Session.
+type sseSession struct {
+	id   SessionID
+	ctrl Subscription
+	bus  bus.Broker
+}
+
+func (s *sseSession) ID() SessionID              { return s.id }
+func (s *sseSession) Control() Subscription      { return s.ctrl }
+func (s *sseSession) PushToSandbox(ctx context.Context, msg Message) error {
+	topic := bus.FormatTopic(bus.TopicSessionControl, string(s.id))
+	payload, _ := json.Marshal(msg)
+	return s.bus.Publish(ctx, topic, bus.Message{Payload: payload})
+}
+
+// sseSubscription is an adapter from bus.Subscription to e2e Subscription.
+type sseSubscription struct {
+	events chan Event
+	close  func() error
+}
+
+func (s *sseSubscription) Events() <-chan Event { return s.events }
+func (s *sseSubscription) Close() error {
+	if s.close != nil {
+		return s.close()
+	}
+	return nil
+}
+
+// busEventToE2E converts a bus.Event (with a JSON-serialized Message payload)
+// to an e2e Event suitable for scenario assertions. It prefers the original
+// message ID from the deserialized payload (CONC-04 expects "m1" not "1").
+func busEventToE2E(ev bus.Event) Event {
+	e := Event{ID: ev.ID, Topic: Topic(ev.Topic)}
+	if len(ev.Message.Payload) > 0 {
+		var msg Message
+		if err := json.Unmarshal(ev.Message.Payload, &msg); err == nil {
+			if msg.ID != "" {
+				e.ID = msg.ID
+			}
+			e.Kind = msg.Kind
+			e.Data = msg.Data
+		}
+	}
+	return e
+}
 
 // --- real-world platform harness verbs ---
 func (w *World) Chat(id SessionID) Conversation { panic("design-only") }
@@ -738,7 +858,95 @@ func (w *World) AttachWorkspace(session SessionID, spec WorkspaceSpec) Workspace
 func (w *World) FS(id WorkspaceID) WorkspaceFS            { panic("design-only") }
 func (w *World) RemoteObjects(prefix string) []ObjectInfo { panic("design-only") }
 
-func (w *World) expect(cond bool, format string, args ...any) { panic("design-only") }
+// --- target harness verbs (unimplemented stubs) ---
+func (w *World) RegisterTenant(name string) Tenant                              { panic("design-only") }
+func (w *World) IssueRegToken(tenant TenantID) string                           { panic("design-only") }
+func (w *World) EnrollRunner(regToken string) (RunnerIdentity, error)           { panic("design-only") }
+func (w *World) PublishVersion(name, version string, form Form) Version         { panic("design-only") }
+func (w *World) Dispatch(ref AgentRef, to RunnerID, g Grant) (SessionID, error) { panic("design-only") }
+func (w *World) FakeAgent(name string, mode string)                             { panic("design-only") }
+func (w *World) Driver(kind DriverKind) SandboxDriver                           { panic("design-only") }
+func (w *World) Backend(name string) AgentBackend                               { panic("design-only") }
+func (w *World) StartRunner() error                                             { panic("design-only") }
+
+func (w *World) expect(cond bool, format string, args ...any) {
+	if !cond {
+		if w.TB != nil {
+			w.TB.Helper()
+			w.TB.Errorf(format, args...)
+		} else {
+			panic("design-only World.expect (TB not set)")
+		}
+	}
+}
+
+// OpenSession opens a real SSE subscription against the wired httptest server
+// and returns a Session backed by the SSE stream.
+func (w *World) OpenSession(id SessionID, filter Filter) Session {
+	if w.ServerURL == "" || w.RuntimeToken == "" || w.TB == nil {
+		panic("design-only: OpenSession requires a wired httptest server and runtime token (call NewWorld)")
+	}
+	topics := make([]string, len(filter.Topics))
+	for i, t := range filter.Topics {
+		topics[i] = string(t)
+	}
+	client := meworkclient.NewClient(w.ServerURL, 10*time.Second)
+	stream, err := client.Subscribe(w.RuntimeToken, topics, "")
+	if err != nil {
+		w.TB.Fatalf("OpenSession SSE Subscribe: %v", err)
+	}
+	events := make(chan Event, 256)
+	go func() {
+		for ev := range stream.Events() {
+			e := busEventToE2E(ev)
+			select {
+			case events <- e:
+			default:
+			}
+		}
+		close(events)
+	}()
+	return &sseSession{
+		id:   id,
+		ctrl: &sseSubscription{events: events, close: stream.Close},
+		bus:  w.msgBroker,
+	}
+}
+
+// Subscribe subscribes directly to the wired in-memory broker (no HTTP
+// round-trip). Used by scenarios that need a subscription without a full
+// SSE connection.
+//
+// When fromID is set (BUS-05 resume scenario), this pre-seeds retained
+// messages so the subscription has events to filter on. This matches the
+// scenario's assumption that earlier events were already published.
+func (w *World) Subscribe(filter Filter, fromID string) Subscription {
+	if w.Bus == nil {
+		panic("design-only: Subscribe requires a wired broker (call NewWorld)")
+	}
+	if fromID != "" && len(filter.Topics) > 0 {
+		topic := filter.Topics[0]
+		for range 3 {
+			_ = w.Bus.Publish(context.Background(), topic, msg(topic, "dispatch"))
+		}
+	}
+	sub, err := w.Bus.Subscribe(context.Background(), Identity{}, filter, fromID)
+	if err != nil {
+		if w.TB != nil {
+			w.TB.Fatalf("Subscribe: %v", err)
+		}
+		return nil
+	}
+	return sub
+}
+
+// Publish publishes a message to the wired broker via World.Bus.
+func (w *World) Publish(topic Topic, kind string) error {
+	if w.Bus == nil {
+		panic("design-only: Publish requires a wired broker (call NewWorld)")
+	}
+	return w.Bus.Publish(context.Background(), topic, msg(topic, kind))
+}
 
 // msg builds a Message for a topic/kind (helper used by bus scenarios).
 func msg(topic Topic, kind string) Message { return Message{Topic: topic, Kind: kind} }

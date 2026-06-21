@@ -10,7 +10,9 @@
 // api_test.go (the review surface); the harness World is below.
 package e2e
 
-import "testing"
+import (
+	"testing"
+)
 
 // Status badges — each scenario declares whether the behavior exists today or is
 // planned under a specific change. Planned scenarios skip with their change id.
@@ -85,13 +87,26 @@ func (b *Builder) And(desc string, fn func(*World)) *Builder {
 	return b.add(k, desc, fn)
 }
 
-// Run finalizes the scenario. For now it SKIPS: the behavior is under review, not yet
-// implemented. The step closures are retained (not executed) so the API usage compiles
-// and the scenario reads top-to-bottom in the source.
+// Run finalizes the scenario. For Implemented status, it builds a World and executes
+// each step's closure sequentially. For planned/pending statuses, it skips.
+//
+// When TEST_DATABASE_URL is set, the World is backed by the real test DB (via NewWorld).
+// Without a DB, a bare World is used — all its methods panic with "design-only" (or
+// dereference nil pointers), which is the expected RED failure mode: the tests must fail
+// until the World harness is wired.
 func (b *Builder) Run() {
 	b.t.Helper()
-	// Retain the steps so the compiler treats the closures as used. Executing them is a
-	// future flip (remove the Skip and call s.fn(w) per step against a built World).
-	_ = b.steps
-	b.t.Skipf("[%s] %s — %s", b.id, b.title, b.status)
+	if b.status != Implemented {
+		b.t.Skipf("[%s] %s — %s", b.id, b.title, b.status)
+		return
+	}
+
+	// Implemented scenarios require the full DB-backed World.
+	// NewWorld skips the test when TEST_DATABASE_URL is unset.
+	w := NewWorld(b.t)
+	w.TB = b.t
+
+	for _, s := range b.steps {
+		s.fn(w)
+	}
 }

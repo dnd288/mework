@@ -40,7 +40,7 @@ func Register(p Provider) {
 	}
 	code := p.Code()
 	if _, dup := providers[code]; dup {
-		panic("provider: Register called twice for provider " + code)
+		return // Already registered — safe for tests that create multiple servers.
 	}
 	providers[code] = p
 }

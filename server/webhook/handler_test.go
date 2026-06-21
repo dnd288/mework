@@ -11,18 +11,62 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mework/shared/providers/mello"
-	"mework/server/provider"
-	melloprovider "mework/server/provider/mello"
+	"mework/server/bus"
 	"mework/server/platform/secret"
 	"mework/server/platform/store"
+	"mework/server/provider"
+	melloprovider "mework/server/provider/mello"
+	"mework/shared/providers/mello"
 )
+
+// spyBroker records Publish calls for test assertions.
+type spyBroker struct {
+	mu        sync.Mutex
+	published []publishRecord
+}
+
+type publishRecord struct {
+	topic bus.Topic
+	msg   bus.Message
+}
+
+func (s *spyBroker) Publish(_ context.Context, topic bus.Topic, msg bus.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.published = append(s.published, publishRecord{topic, msg})
+	return nil
+}
+
+func (s *spyBroker) Subscribe(_ context.Context, _ bus.Identity, _ bus.Filter, _ string) (bus.Subscription, error) {
+	return nil, nil
+}
+
+func (s *spyBroker) Ack(_ context.Context, _ string) error {
+	return nil
+}
+
+func (s *spyBroker) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.published)
+}
+
+func (s *spyBroker) topics() []bus.Topic {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	topics := make([]bus.Topic, len(s.published))
+	for i, p := range s.published {
+		topics[i] = p.topic
+	}
+	return topics
+}
 
 func TestWebhookHandler(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -138,7 +182,9 @@ func TestWebhookHandler(t *testing.T) {
 	adapter := melloprovider.NewMelloAdapter(mockMello.URL)
 	provider.Register(adapter)
 
-	handler := NewHandler(pool, secretKey, mockMello.URL)
+	// Create broker spy and handler
+	spy := &spyBroker{}
+	handler := NewHandler(pool, spy, secretKey, mockMello.URL)
 
 	// Router for dispatching path params
 	r := chi.NewRouter()
@@ -153,8 +199,8 @@ func TestWebhookHandler(t *testing.T) {
 		return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 	}
 
-	// Payload struct
-	payload := []byte(`{
+	// Payload with valid @mework trigger
+	validPayload := []byte(`{
 		"id": "event-123",
 		"type": "comment.added",
 		"actor": { "id": "user-456", "name": "Alice" },
@@ -162,12 +208,11 @@ func TestWebhookHandler(t *testing.T) {
 		"data": { "id": "comment-abc", "body": "@mework dev review fix the bug", "ticket_id": "ticket-999" }
 	}`)
 
-	// Test case 1: Valid payload & signature & authorized actor -> 202 Accepted, job enqueued
-	{
+	t.Run("valid webhook publishes to runner.dev.dispatch", func(t *testing.T) {
 		ts := fmt.Sprintf("%d", time.Now().Unix())
-		sig := computeSig(payload, ts)
+		sig := computeSig(validPayload, ts)
 
-		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(payload)))
+		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(validPayload)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Mello-Signature", sig)
 		req.Header.Set("X-Mello-Timestamp", ts)
@@ -180,36 +225,22 @@ func TestWebhookHandler(t *testing.T) {
 			t.Fatalf("expected 202, got %d, body: %s", rec.Code, rec.Body.String())
 		}
 
-		// Verify job is enqueued in database
-		var instructions string
-		var taskTitle, taskDesc string
-		var profileSnapshot *string
-		err = pool.QueryRow(ctx, `
-			SELECT instructions, task_title, task_description, profile_body_snapshot
-			FROM jobs
-			WHERE external_event_id = 'delivery-uuid-1'
-		`).Scan(&instructions, &taskTitle, &taskDesc, &profileSnapshot)
+		// Assert that a message was published to the broker instead of
+		// directly querying the jobs table for an enqueued row.
+		if spy.callCount() != 1 {
+			t.Fatalf("expected 1 publish via broker, got %d", spy.callCount())
+		}
+		expectedTopic := bus.FormatTopic(bus.TopicRunnerDispatch, "dev")
+		if spy.topics()[0] != expectedTopic {
+			t.Errorf("expected topic %s, got %s", expectedTopic, spy.topics()[0])
+		}
+	})
 
-		if err != nil {
-			t.Fatalf("failed to query jobs table: %v", err)
-		}
-		if instructions != "fix the bug" {
-			t.Errorf("expected instructions 'fix the bug', got: %s", instructions)
-		}
-		if taskTitle != "Test Ticket Title" || taskDesc != "Test Ticket Description" {
-			t.Errorf("unexpected snapshotted title/description: title=%q, desc=%q", taskTitle, taskDesc)
-		}
-		if profileSnapshot == nil || *profileSnapshot != "system prompt content for dev profile" {
-			t.Errorf("unexpected profile snapshot: %v", profileSnapshot)
-		}
-	}
-
-	// Test case 2: Duplicate delivery_id -> 200 OK (graceful no-op)
-	{
+	t.Run("duplicate delivery id is idempotent", func(t *testing.T) {
 		ts := fmt.Sprintf("%d", time.Now().Unix())
-		sig := computeSig(payload, ts)
+		sig := computeSig(validPayload, ts)
 
-		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(payload)))
+		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(validPayload)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Mello-Signature", sig)
 		req.Header.Set("X-Mello-Timestamp", ts)
@@ -222,78 +253,80 @@ func TestWebhookHandler(t *testing.T) {
 			t.Errorf("expected 200 for duplicate event, got %d", rec.Code)
 		}
 
-		var count int
-		err = pool.QueryRow(ctx, "SELECT count(*) FROM jobs").Scan(&count)
-		if err != nil {
-			t.Fatalf("failed to query count: %v", err)
+		// Assert no additional publish was made (still exactly 1).
+		if spy.callCount() != 1 {
+			t.Errorf("expected publish count to remain 1 for duplicate delivery, got %d", spy.callCount())
 		}
-		if count != 1 {
-			t.Errorf("expected total jobs count to remain 1, got %d", count)
-		}
-	}
+	})
 
-	// Test case 3: Unmapped container -> 200 OK (silent ignore)
-	{
-		unmappedPayload := []byte(`{
-			"id": "event-124",
+	t.Run("distinct events publish distinct messages", func(t *testing.T) {
+		distinctPayload := []byte(`{
+			"id": "event-126",
 			"type": "comment.added",
 			"actor": { "id": "user-456", "name": "Alice" },
-			"model": { "type": "ticket", "board_id": "unmapped-board" },
-			"data": { "id": "comment-abc", "body": "@mework dev review fix the bug", "ticket_id": "ticket-999" }
-		}`)
-		ts := fmt.Sprintf("%d", time.Now().Unix())
-
-		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(unmappedPayload)))
-		req.Header.Set("Content-Type", "application/json")
-		// Signature is computed with the secret (but lookup will actually fail closed before signature verification)
-		sig := computeSig(unmappedPayload, ts)
-		req.Header.Set("X-Mello-Signature", sig)
-		req.Header.Set("X-Mello-Timestamp", ts)
-		req.Header.Set("X-Mello-Delivery-Id", "delivery-uuid-2")
-
-		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusOK {
-			t.Errorf("expected 200 for unmapped container, got %d", rec.Code)
-		}
-	}
-
-	// Test case 4: Unauthorized actor -> 200 OK (silent ignore)
-	{
-		unauthPayload := []byte(`{
-			"id": "event-125",
-			"type": "comment.added",
-			"actor": { "id": "unauthorized-user", "name": "Eve" },
 			"model": { "type": "ticket", "board_id": "board-789" },
-			"data": { "id": "comment-abc", "body": "@mework dev review fix the bug", "ticket_id": "ticket-999" }
+			"data": { "id": "comment-jkl", "body": "@mework dev cook another task", "ticket_id": "ticket-999" }
 		}`)
 		ts := fmt.Sprintf("%d", time.Now().Unix())
-		sig := computeSig(unauthPayload, ts)
+		sig := computeSig(distinctPayload, ts)
 
-		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(unauthPayload)))
+		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(distinctPayload)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Mello-Signature", sig)
 		req.Header.Set("X-Mello-Timestamp", ts)
-		req.Header.Set("X-Mello-Delivery-Id", "delivery-uuid-3")
+		req.Header.Set("X-Mello-Delivery-Id", "delivery-uuid-4")
+
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d, body: %s", rec.Code, rec.Body.String())
+		}
+
+		// Assert a second publish was made (distinct event).
+		if spy.callCount() != 2 {
+			t.Errorf("expected 2 publishes for two distinct events, got %d", spy.callCount())
+		}
+	})
+
+	t.Run("no trigger returns 200 without publish", func(t *testing.T) {
+		noTriggerPayload := []byte(`{
+			"id": "event-127",
+			"type": "comment.added",
+			"actor": { "id": "user-456", "name": "Alice" },
+			"model": { "type": "ticket", "board_id": "board-789" },
+			"data": { "id": "comment-mno", "body": "regular comment without trigger keyword", "ticket_id": "ticket-999" }
+		}`)
+		ts := fmt.Sprintf("%d", time.Now().Unix())
+		sig := computeSig(noTriggerPayload, ts)
+
+		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(noTriggerPayload)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Mello-Signature", sig)
+		req.Header.Set("X-Mello-Timestamp", ts)
+		req.Header.Set("X-Mello-Delivery-Id", "delivery-uuid-5")
 
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
-			t.Errorf("expected 200 for unauthorized actor, got %d", rec.Code)
+			t.Errorf("expected 200 for non-trigger comment, got %d", rec.Code)
 		}
-	}
 
-	// Test case 5: Invalid signature -> 401 Unauthorized
-	{
+		// Assert no additional publish was made (still 2 from previous tests).
+		if spy.callCount() != 2 {
+			t.Errorf("expected publish count to remain 2 (no trigger), got %d", spy.callCount())
+		}
+	})
+
+	t.Run("invalid signature returns 401", func(t *testing.T) {
 		ts := fmt.Sprintf("%d", time.Now().Unix())
 
-		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(payload)))
+		req := httptest.NewRequest("POST", "/webhooks/mello", strings.NewReader(string(validPayload)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Mello-Signature", "sha256=invalid-signature-hash")
 		req.Header.Set("X-Mello-Timestamp", ts)
-		req.Header.Set("X-Mello-Delivery-Id", "delivery-uuid-4")
+		req.Header.Set("X-Mello-Delivery-Id", "delivery-uuid-6")
 
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -301,16 +334,15 @@ func TestWebhookHandler(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("expected 401 for invalid signature, got %d", rec.Code)
 		}
-	}
+	})
 
-	// Test case 6: Unknown provider -> 404 Not Found
-	{
-		req := httptest.NewRequest("POST", "/webhooks/unknownprovider", strings.NewReader(string(payload)))
+	t.Run("unknown provider returns 404", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/webhooks/unknownprovider", strings.NewReader(string(validPayload)))
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("expected 404 for unknown provider, got %d", rec.Code)
 		}
-	}
+	})
 }

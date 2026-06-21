@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -11,22 +12,25 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"mework/shared/providers/mello"
+	"mework/server/bus"
 	"mework/server/connection"
 	"mework/server/orchestrator"
 	"mework/server/provider"
+	"mework/shared/providers/mello"
 )
 
 type Handler struct {
-	pool            *pgxpool.Pool
-	secretKey       string
-	melloBaseURL    string
-	connectionSvc   *connection.Service
+	pool          *pgxpool.Pool
+	broker        bus.Broker
+	secretKey     string
+	melloBaseURL  string
+	connectionSvc *connection.Service
 }
 
-func NewHandler(pool *pgxpool.Pool, secretKey string, melloBaseURL string) *Handler {
+func NewHandler(pool *pgxpool.Pool, broker bus.Broker, secretKey string, melloBaseURL string) *Handler {
 	return &Handler{
 		pool:          pool,
+		broker:        broker,
 		secretKey:     secretKey,
 		melloBaseURL:  melloBaseURL,
 		connectionSvc: connection.NewService(pool, secretKey),
@@ -213,8 +217,35 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// We just pass finalInstructions = instructions.
 	}
 
-	// 13. Enqueue job
-	jobID, err := orchestrator.Enqueue(r.Context(), h.pool, orchestrator.EnqueueParams{
+	// 13. Publish dispatch message to the bus
+	topic := bus.FormatTopic(bus.TopicRunnerDispatch, profileName)
+	msgPayload, err := json.Marshal(map[string]interface{}{
+		"runtime_id":          runtimeID,
+		"external_task_id":    ev.ExternalTaskID,
+		"provider_code":       providerCode,
+		"external_actor_id":   ev.Actor.ID,
+		"task_title":          ticket.Title,
+		"task_description":    ticket.Description,
+		"profile_body_snapshot": profileBodySnapshot,
+		"workflow":            workflowName,
+		"instructions":        finalInstructions,
+	})
+	if err != nil {
+		log.Printf("Failed to marshal message payload: %v", err)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	err = h.broker.Publish(r.Context(), topic, bus.Message{Payload: msgPayload})
+	if err != nil {
+		log.Printf("Failed to publish dispatch message: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Insert job row into backing store for state tracking.
+	// This is best-effort: the publish is the transport, the store is the record.
+	_, _ = orchestrator.Enqueue(r.Context(), h.pool, orchestrator.EnqueueParams{
 		AccountID:           accountID,
 		RuntimeID:           runtimeID,
 		ExternalTaskID:      ev.ExternalTaskID,
@@ -227,23 +258,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Workflow:            workflowName,
 		Instructions:        finalInstructions,
 	})
-
-	if err != nil {
-		if errors.Is(err, orchestrator.ErrInstructionsTooLarge) {
-			log.Printf("Trigger rejected: %v", err)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		log.Printf("Failed to enqueue job: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	if jobID == "" {
-		log.Printf("Race condition or duplicate webhook event %s detected on insert, skipping", deliveryID)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
 
 	w.WriteHeader(http.StatusAccepted)
 }

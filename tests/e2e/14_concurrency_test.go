@@ -55,7 +55,7 @@ func TestCONC_03_SandboxIsolationUnderLoad(t *testing.T) {
 }
 
 func TestCONC_04_PerTopicOrdering(t *testing.T) {
-	Scenario(t, "CONC-04", "Per-topic delivery is ordered under concurrent publish", PlannedC0003).
+	Scenario(t, "CONC-04", "Per-topic delivery is ordered under concurrent publish", Implemented).
 		Given("a subscriber to topic T", func(w *World) {
 			w.Session = w.OpenSession("R", Filter{Topics: []Topic{"T"}})
 		}).
@@ -72,7 +72,7 @@ func TestCONC_04_PerTopicOrdering(t *testing.T) {
 }
 
 func TestCONC_05_NoCrossSessionLeakage(t *testing.T) {
-	Scenario(t, "CONC-05", "Concurrent sessions never cross-deliver", PlannedC0003).
+	Scenario(t, "CONC-05", "Concurrent sessions never cross-deliver", Implemented).
 		Given("sessions s1 and s2 active concurrently, each on its control topic", func(w *World) {
 			w.Session = w.OpenSession("s1", Filter{Topics: []Topic{"session.s1.control"}})
 		}).
