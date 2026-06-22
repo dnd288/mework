@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"text/tabwriter"
 )
@@ -19,7 +20,12 @@ func printJSON(v any) error {
 
 // newTable returns a tabwriter writing to stdout; caller writes rows then Flush.
 func newTable() *tabwriter.Writer {
-	return tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
+	return newTableTo(os.Stdout)
+}
+
+// newTableTo returns a tabwriter writing to w; caller writes rows then Flush.
+func newTableTo(w io.Writer) *tabwriter.Writer {
+	return tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
 }
 
 // row writes a tab-separated row to a tabwriter.

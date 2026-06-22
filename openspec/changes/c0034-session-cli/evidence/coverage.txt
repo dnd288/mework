@@ -1,0 +1,4 @@
+mework/libs/client/cli/cmd_session.go:27:	sessionEndpoint		83.3%
+mework/libs/client/cli/cmd_session.go:48:	sessionDo		75.0%
+mework/libs/client/cli/cmd_session.go:330:	init			100.0%
+total:						(statements)		54.4%
