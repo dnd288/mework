@@ -218,3 +218,91 @@ func TestProcessSessionDispatch_OpenAndTurns(t *testing.T) {
 		}
 	}
 }
+
+// TestProcessSessionDispatch_WorkspaceBindsDir verifies that an open-session
+// dispatch carrying a Workspace path resolves the definition via the workspace
+// resolver (not the catalog) and binds the sandbox to that directory.
+func TestProcessSessionDispatch_WorkspaceBindsDir(t *testing.T) {
+	const sessionID = "sess-ws-1"
+	const secret = "test-runner-secret-key-32bytes!!"
+	const wsPath = "/abs/workspace/proj"
+
+	inputBroker := memory.New()
+	sseHandler := bus.NewSSEHandler(inputBroker)
+
+	mux := chi.NewRouter()
+	mux.Use(testContextInjector{runtimeID: "test-runner", accountID: "owner-acct"}.Middleware)
+	mux.Get("/api/v1/jobs/subscribe", sseHandler.Subscribe)
+	mux.Post("/api/v1/jobs/messages/{id}/ack", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.Post("/api/v1/runners/sessions/{id}/events", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	defs := map[string]sandbox.SandboxBundleMetadata{
+		"local-claude@1.0.0": {Name: "local-claude", Version: "1.0.0", Engine: "local", Backend: "claude"},
+	}
+
+	// The workspace resolver must be chosen and must receive the dispatch's path.
+	var gotWorkspacePath string
+	origWS := sessionWorkspaceResolverFor
+	sessionWorkspaceResolverFor = func(dir string) DefinitionResolver {
+		gotWorkspacePath = dir
+		return fakeResolver{defs: defs}
+	}
+	t.Cleanup(func() { sessionWorkspaceResolverFor = origWS })
+
+	// The catalog resolver must NOT be used for a workspace-bound dispatch.
+	origCat := sessionResolverFor
+	sessionResolverFor = func(string) DefinitionResolver {
+		t.Error("catalog resolver used for a workspace-bound dispatch")
+		return fakeResolver{defs: defs}
+	}
+	t.Cleanup(func() { sessionResolverFor = origCat })
+
+	drv := &liveFakeDriver{}
+	origMgrFor := sessionRuntimeManagerFor
+	sessionRuntimeManagerFor = func(string) *runtime.Manager { return runtime.NewManager(drv) }
+	t.Cleanup(func() { sessionRuntimeManagerFor = origMgrFor })
+
+	origBrokerFor := sessionBrokerFor
+	sessionBrokerFor = func(hubURL, sec string) bus.Broker { return newHTTPBroker(srv.URL, sec) }
+	t.Cleanup(func() { sessionBrokerFor = origBrokerFor })
+
+	eng := NewEngine("test-runner", secret, srv.URL, srv.URL)
+	eng.client = subscribe.NewClient(srv.URL, 0)
+
+	g, err := grant.NewGrant([]grant.Operation{grant.OpPullAgent, grant.OpSpawn}, []byte(secret))
+	if err != nil {
+		t.Fatalf("new grant: %v", err)
+	}
+	rawGrant, _ := json.Marshal(g)
+
+	d := transport.Dispatch{
+		Agent:     transport.AgentRef{Name: "local-claude", Version: "1.0.0"},
+		Grant:     rawGrant,
+		Session:   sessionID,
+		Runner:    "test-runner",
+		Owner:     "owner-acct",
+		Tenant:    "tenant-a",
+		Workspace: wsPath,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer eng.Stop()
+
+	opts := processOpts{hubURL: srv.URL, catalogURL: srv.URL, secret: secret, client: eng.client}
+	if err := processSessionDispatch(ctx, eng, d, "evt-open", opts); err != nil {
+		t.Fatalf("processSessionDispatch: %v", err)
+	}
+
+	if gotWorkspacePath != wsPath {
+		t.Errorf("workspace resolver got path %q, want %q", gotWorkspacePath, wsPath)
+	}
+	if drv.lastSpec.Workspace.Path != wsPath {
+		t.Errorf("sandbox bound to %q, want %q", drv.lastSpec.Workspace.Path, wsPath)
+	}
+	if _, ok := eng.lookupSession(sessionID); !ok {
+		t.Fatal("session not registered")
+	}
+}

@@ -19,23 +19,25 @@ import (
 
 // fakeDispatcher records the arguments passed to DispatchSessionToRunner.
 type fakeDispatcher struct {
-	calls   int
-	agent   string
-	runner  string
-	session string
-	owner   string
-	tenant  string
-	grant   *grant.Grant
-	err     error
+	calls     int
+	agent     string
+	runner    string
+	session   string
+	owner     string
+	tenant    string
+	workspace string
+	grant     *grant.Grant
+	err       error
 }
 
-func (f *fakeDispatcher) DispatchSessionToRunner(ctx context.Context, agentName, runnerID, sessionID, owner, tenant string, g *grant.Grant) error {
+func (f *fakeDispatcher) DispatchSessionToRunner(ctx context.Context, agentName, runnerID, sessionID, owner, tenant, workspace string, g *grant.Grant) error {
 	f.calls++
 	f.agent = agentName
 	f.runner = runnerID
 	f.session = sessionID
 	f.owner = owner
 	f.tenant = tenant
+	f.workspace = workspace
 	f.grant = g
 	return f.err
 }
@@ -89,6 +91,31 @@ func TestCreateSession_DispatchesAndUsesAuthContext(t *testing.T) {
 	}
 	if disp.grant == nil || !disp.grant.Permits(grant.OpPullAgent) || !disp.grant.Permits(grant.OpSpawn) {
 		t.Errorf("dispatched grant must permit pull+spawn, got %+v", disp.grant)
+	}
+}
+
+func TestCreateSession_ForwardsWorkspace(t *testing.T) {
+	mgr := NewManager(memory.New(), DefaultConfig())
+	defer mgr.Stop()
+	disp := &fakeDispatcher{}
+	h := NewHandlers(mgr, disp, memory.New())
+
+	body, _ := json.Marshal(map[string]string{
+		"agent_name": "local-claude", "runner": "rnr-1", "workspace": "/abs/ws/proj",
+	})
+	req := withAuth(httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewReader(body)), "acct-7", "tenant-9")
+	rec := httptest.NewRecorder()
+
+	h.CreateSession(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	if disp.calls != 1 {
+		t.Fatalf("dispatcher called %d times, want 1", disp.calls)
+	}
+	if disp.workspace != "/abs/ws/proj" {
+		t.Errorf("dispatched workspace = %q, want /abs/ws/proj", disp.workspace)
 	}
 }
 

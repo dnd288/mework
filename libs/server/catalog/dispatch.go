@@ -103,7 +103,7 @@ func (h *AgentHandlers) dispatch(ctx context.Context, agentName, version, runner
 // one-shot agent. Owner and tenant ride along so the runner can authorize the
 // session's turns. It publishes to the same topic the daemon Engine subscribes
 // to for runnerID, so the two are guaranteed to match.
-func (h *AgentHandlers) DispatchSessionToRunner(ctx context.Context, agentName, runnerID, sessionID, owner, tenant string, g *grant.Grant) error {
+func (h *AgentHandlers) DispatchSessionToRunner(ctx context.Context, agentName, runnerID, sessionID, owner, tenant, workspace string, g *grant.Grant) error {
 	if g == nil {
 		return fmt.Errorf("dispatch requires a grant")
 	}
@@ -125,12 +125,13 @@ func (h *AgentHandlers) DispatchSessionToRunner(ctx context.Context, agentName, 
 	}
 
 	msg := transport.Dispatch{
-		Agent:   transport.AgentRef{Name: agentName},
-		Grant:   grantJSON,
-		Session: sessionID,
-		Owner:   owner,
-		Tenant:  tenant,
-		Runner:  runnerID,
+		Agent:     transport.AgentRef{Name: agentName},
+		Grant:     grantJSON,
+		Session:   sessionID,
+		Owner:     owner,
+		Tenant:    tenant,
+		Runner:    runnerID,
+		Workspace: workspace,
 	}
 
 	payload, err := json.Marshal(msg)

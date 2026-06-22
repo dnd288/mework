@@ -16,7 +16,7 @@ import (
 // satisfied by *catalog.AgentHandlers; injected so the session handlers can be
 // tested without the full catalog.
 type Dispatcher interface {
-	DispatchSessionToRunner(ctx context.Context, agentName, runnerID, sessionID, owner, tenant string, g *grant.Grant) error
+	DispatchSessionToRunner(ctx context.Context, agentName, runnerID, sessionID, owner, tenant, workspace string, g *grant.Grant) error
 }
 
 // Handlers provides HTTP handlers for the session API.
@@ -47,6 +47,9 @@ type createSessionRequest struct {
 	AgentName string `json:"agent_name"`
 	Version   string `json:"version,omitempty"`
 	Runner    string `json:"runner"`
+	// Workspace, when set, is an absolute local directory the runner binds the
+	// session's sandbox to (resolving its definition from the dir's mework.yml).
+	Workspace string `json:"workspace,omitempty"`
 }
 
 // CreateSession handles POST /api/v1/sessions.
@@ -86,7 +89,7 @@ func (h *Handlers) CreateSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if derr := h.dispatch.DispatchSessionToRunner(
-			r.Context(), req.AgentName, req.Runner, string(info.ID), string(owner), string(tenant), g,
+			r.Context(), req.AgentName, req.Runner, string(info.ID), string(owner), string(tenant), req.Workspace, g,
 		); derr != nil {
 			// The session is already created; dispatch is best-effort (the
 			// runner may not be subscribed yet). Log but don't fail the create,

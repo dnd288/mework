@@ -24,6 +24,12 @@ var (
 	// agent definition over the catalog. When nil the session path cannot resolve.
 	sessionResolverFor func(catalogURL string) DefinitionResolver
 
+	// sessionWorkspaceResolverFor builds the DefinitionResolver used when an
+	// open-session dispatch carries a workspace path: it resolves the definition
+	// from that directory's mework.yml (a file resolver). When nil, a
+	// workspace-bound dispatch cannot resolve.
+	sessionWorkspaceResolverFor func(workspaceDir string) DefinitionResolver
+
 	// sessionBrokerFor builds the bus.Broker the session's EventPublisher uses to
 	// egress per-turn events to the server (an httpBroker POSTing to the events
 	// endpoint). This is separate from the in-process broker the session.Manager
@@ -53,6 +59,13 @@ func SetSessionResolverFactory(f func(catalogURL string) DefinitionResolver) {
 	sessionResolverFor = f
 }
 
+// SetSessionWorkspaceResolverFactory wires the factory used to build a
+// workspace-backed definition resolver (reads <dir>/mework.yml) for
+// workspace-bound open-session dispatches. The daemon calls this at startup.
+func SetSessionWorkspaceResolverFactory(f func(workspaceDir string) DefinitionResolver) {
+	sessionWorkspaceResolverFor = f
+}
+
 // processSessionDispatch drives an open-session (interactive) dispatch: it
 // verifies the dispatch grant (requiring pull+spawn), builds the owning caller
 // from the dispatch's owner/tenant, resolves the agent definition, opens a
@@ -77,20 +90,30 @@ func processSessionDispatch(ctx context.Context, e *Engine, d transport.Dispatch
 		Grant:   g,
 	}
 
-	// 3. Resolve the definition and build session deps.
-	if sessionResolverFor == nil {
-		return ackAndReturn(ctx, opts, eventID, fmt.Errorf("no session resolver configured"))
-	}
-	resolver := sessionResolverFor(opts.catalogURL)
+	// 3. Build session deps and resolve the definition. A workspace-bound
+	// dispatch resolves from the workspace's mework.yml and binds the sandbox to
+	// the directory; otherwise it resolves from the server catalog.
 	eventsBroker := sessionBrokerFor(opts.hubURL, opts.secret)
 	mgr := sessionManagerFor()
 
 	deps := SessionDeps{
-		Resolver:   resolver,
 		ManagerFor: sessionRuntimeManagerFor,
 		Broker:     eventsBroker,
 		Sessions:   mgr,
 		GrantKey:   []byte(opts.secret),
+	}
+
+	if d.Workspace != "" {
+		if sessionWorkspaceResolverFor == nil {
+			return ackAndReturn(ctx, opts, eventID, fmt.Errorf("no workspace resolver configured"))
+		}
+		deps.Resolver = sessionWorkspaceResolverFor(d.Workspace)
+		deps.Workspace = core.Workspace{Path: d.Workspace}
+	} else {
+		if sessionResolverFor == nil {
+			return ackAndReturn(ctx, opts, eventID, fmt.Errorf("no session resolver configured"))
+		}
+		deps.Resolver = sessionResolverFor(opts.catalogURL)
 	}
 
 	// 4. Open the session's sandbox exactly once.

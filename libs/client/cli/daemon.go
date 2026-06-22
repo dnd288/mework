@@ -185,6 +185,11 @@ func runForeground(prof string) error {
 	runner.SetSessionResolverFactory(func(catalogURL string) runner.DefinitionResolver {
 		return &catalog.HTTPDefinitionResolver{BaseURL: catalogURL}
 	})
+	// Workspace-bound dispatches (mework sandbox start -w .) resolve the
+	// definition from the workspace's mework.yml and bind the sandbox to the dir.
+	runner.SetSessionWorkspaceResolverFactory(func(workspaceDir string) runner.DefinitionResolver {
+		return &catalog.FileDefinitionResolver{WorkspaceDir: workspaceDir}
+	})
 
 	engine := runner.NewEngine(runnerID, secret, cfg.ServerURL, cfg.ServerURL)
 	return engine.Start(ctx)

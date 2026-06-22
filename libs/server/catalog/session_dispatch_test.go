@@ -43,7 +43,7 @@ func TestDispatchSessionToRunner(t *testing.T) {
 		t.Fatalf("NewGrant: %v", err)
 	}
 
-	if err := h.DispatchSessionToRunner(ctx, "code-fixer", runnerID, sessionID, owner, tenant, g); err != nil {
+	if err := h.DispatchSessionToRunner(ctx, "code-fixer", runnerID, sessionID, owner, tenant, "/ws/proj", g); err != nil {
 		t.Fatalf("DispatchSessionToRunner: %v", err)
 	}
 
@@ -57,14 +57,18 @@ func TestDispatchSessionToRunner(t *testing.T) {
 			Grant   json.RawMessage   `json:"grant"`
 			Session string            `json:"session"`
 			Owner   string            `json:"owner"`
-			Tenant  string            `json:"tenant"`
-			Runner  string            `json:"runner"`
+			Tenant    string          `json:"tenant"`
+			Runner    string          `json:"runner"`
+			Workspace string          `json:"workspace"`
 		}
 		if err := json.Unmarshal(evt.Message.Payload, &msg); err != nil {
 			t.Fatalf("unmarshal dispatch: %v", err)
 		}
 		if msg.Session != sessionID {
 			t.Errorf("session = %q, want %q", msg.Session, sessionID)
+		}
+		if msg.Workspace != "/ws/proj" {
+			t.Errorf("workspace = %q, want %q", msg.Workspace, "/ws/proj")
 		}
 		if msg.Owner != owner {
 			t.Errorf("owner = %q, want %q", msg.Owner, owner)
@@ -87,7 +91,7 @@ func TestDispatchSessionToRunner(t *testing.T) {
 func TestDispatchSessionToRunner_NilGrant(t *testing.T) {
 	broker := memory.New()
 	h := NewAgentHandlers(NewService(nil), broker, nil, nil)
-	err := h.DispatchSessionToRunner(context.Background(), "code-fixer", "rnr-1", "sess", "o", "t", nil)
+	err := h.DispatchSessionToRunner(context.Background(), "code-fixer", "rnr-1", "sess", "o", "t", "", nil)
 	if err == nil {
 		t.Fatal("expected error for nil grant")
 	}

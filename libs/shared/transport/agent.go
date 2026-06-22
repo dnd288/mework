@@ -43,4 +43,8 @@ type Dispatch struct {
 	Tenant     string          `json:"tenant,omitempty"`
 	Runner     string          `json:"runner"`
 	ChannelKey string          `json:"channel_key,omitempty"`
+	// Workspace, when set on an open-session dispatch, is an absolute local
+	// directory the daemon binds the sandbox to (resolving the definition from
+	// the dir's mework.yml) instead of resolving from the server catalog.
+	Workspace string `json:"workspace,omitempty"`
 }
