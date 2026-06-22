@@ -31,11 +31,11 @@ import (
 const maxRequestBytes = 4 << 20 // 4 MiB
 
 type Server struct {
-	Router              *chi.Mux
-	Pool                *pgxpool.Pool
-	Config              *Config
-	Notifier            *notify.Notifier
-	ArtifactHandlers    *ArtifactHandlers
+	Router           *chi.Mux
+	Pool             *pgxpool.Pool
+	Config           *Config
+	Notifier         *notify.Notifier
+	ArtifactHandlers *ArtifactHandlers
 }
 
 func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
@@ -119,48 +119,65 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	channelHandlers := channel.NewHandlers(pool)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(patAuth.Middleware)
+		// PAT-authenticated management routes (operator / human caller). Grouped
+		// (rather than r.Use on the mount) so the runtime-authed agent pull route
+		// below can live in the same /api/v1 mount without a separate
+		// /api/v1/agents sub-mount shadowing these PAT-authed agent routes.
+		r.Group(func(r chi.Router) {
+			r.Use(patAuth.Middleware)
 
-		r.Post("/runtimes", registryHandlers.CreateRuntime)
-		r.Get("/runtimes", registryHandlers.ListRuntimes)
-		r.Delete("/runtimes/{id}", registryHandlers.DeleteRuntime)
+			r.Post("/runtimes", registryHandlers.CreateRuntime)
+			r.Get("/runtimes", registryHandlers.ListRuntimes)
+			r.Delete("/runtimes/{id}", registryHandlers.DeleteRuntime)
 
-		r.Post("/connections", connectionHandlers.CreateConnection)
-		r.Get("/connections", connectionHandlers.ListConnections)
-		r.Get("/connections/{provider_code}", connectionHandlers.GetConnection)
-		r.Delete("/connections/{provider_code}", connectionHandlers.DeleteConnection)
+			r.Post("/connections", connectionHandlers.CreateConnection)
+			r.Get("/connections", connectionHandlers.ListConnections)
+			r.Get("/connections/{provider_code}", connectionHandlers.GetConnection)
+			r.Delete("/connections/{provider_code}", connectionHandlers.DeleteConnection)
 
-		r.Post("/profiles", profileHandlers.CreateProfile)
-		r.Get("/profiles", profileHandlers.ListProfiles)
-		r.Get("/profiles/{name}", profileHandlers.GetProfile)
-		r.Put("/profiles/{name}", profileHandlers.UpdateProfile)
-		r.Delete("/profiles/{name}", profileHandlers.DeleteProfile)
+			r.Post("/profiles", profileHandlers.CreateProfile)
+			r.Get("/profiles", profileHandlers.ListProfiles)
+			r.Get("/profiles/{name}", profileHandlers.GetProfile)
+			r.Put("/profiles/{name}", profileHandlers.UpdateProfile)
+			r.Delete("/profiles/{name}", profileHandlers.DeleteProfile)
 
-		r.Post("/agents/{name}/versions", agentHandlers.PublishVersion)
-		r.Get("/agents", agentHandlers.ListAgents)
-		r.Get("/agents/{name}", agentHandlers.ResolveAgent)
-		r.Post("/agents/{name}/dispatch", agentHandlers.Dispatch)
+			r.Post("/agents/{name}/versions", agentHandlers.PublishVersion)
+			r.Get("/agents", agentHandlers.ListAgents)
+			r.Get("/agents/{name}", agentHandlers.ResolveAgent)
+			r.Post("/agents/{name}/dispatch", agentHandlers.Dispatch)
 
-		r.Post("/runners/registration-tokens", registryHandlers.IssueRegistrationToken)
+			r.Post("/runners/registration-tokens", registryHandlers.IssueRegistrationToken)
 
-		// Artifact endpoints: list artifacts for a run, download a single artifact.
-		r.Get("/runs/{runID}/artifacts", artifactHandlers.ListArtifacts)
-		r.Get("/runs/{runID}/artifacts/{name}", artifactHandlers.GetArtifact)
+			// Artifact endpoints: list artifacts for a run, download a single artifact.
+			r.Get("/runs/{runID}/artifacts", artifactHandlers.ListArtifacts)
+			r.Get("/runs/{runID}/artifacts/{name}", artifactHandlers.GetArtifact)
 
-		// Channel sessions endpoint: list active channel bindings.
-		r.Get("/channels", channelHandlers.ListChannels)
+			// Channel sessions endpoint: list active channel bindings.
+			r.Get("/channels", channelHandlers.ListChannels)
 
-		// Interactive session lifecycle (c0031): create dispatches an
-		// open-session message to the named runner; owner/tenant come from
-		// the authenticated PAT, never from request args.
-		r.Post("/sessions", sessionHandlers.CreateSession)
-		r.Get("/sessions", sessionHandlers.ListSessions)
-		r.Get("/sessions/{id}", sessionHandlers.GetSession)
-		r.Delete("/sessions/{id}", sessionHandlers.CloseSession)
+			// Interactive session lifecycle (c0031): create dispatches an
+			// open-session message to the named runner; owner/tenant come from
+			// the authenticated PAT, never from request args.
+			r.Post("/sessions", sessionHandlers.CreateSession)
+			r.Get("/sessions", sessionHandlers.ListSessions)
+			r.Get("/sessions/{id}", sessionHandlers.GetSession)
+			r.Delete("/sessions/{id}", sessionHandlers.CloseSession)
 
-		// Session chat bus (c0032, PAT/human): submit a turn and stream events.
-		r.Post("/sessions/{id}/messages", sessionHandlers.SendMessage)
-		r.Get("/sessions/{id}/stream", sessionHandlers.StreamSession)
+			// Session chat bus (c0032, PAT/human): submit a turn and stream events.
+			r.Post("/sessions/{id}/messages", sessionHandlers.SendMessage)
+			r.Get("/sessions/{id}/stream", sessionHandlers.StreamSession)
+		})
+
+		// Runtime-authenticated agent pull (rt_ Bearer + grant). Same /api/v1
+		// mount, separate middleware group — coexists with the PAT-authed agent
+		// management routes above (distinct paths) with no shadowing.
+		r.Group(func(r chi.Router) {
+			r.Use(runtimeAuth.Middleware)
+			r.With(
+				middleware.GrantMiddleware([]byte(cfg.ServerKey)),
+				middleware.RequireOperation(grant.OpPullAgent),
+			).Get("/agents/{name}/versions/{version}/pull", agentHandlers.PullVersion)
+		})
 	})
 
 	r.Post("/api/v1/runners/enroll", registryHandlers.EnrollRunner)
@@ -172,14 +189,6 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 		r.Use(runtimeAuth.Middleware)
 		r.Post("/{id}/result", sessionHandlers.ResultSession)
 		r.Post("/{id}/events", sessionHandlers.ReceiveEvents)
-	})
-
-	r.Route("/api/v1/agents", func(r chi.Router) {
-		r.Use(runtimeAuth.Middleware)
-		r.With(
-			middleware.GrantMiddleware([]byte(cfg.ServerKey)),
-			middleware.RequireOperation(grant.OpPullAgent),
-		).Get("/{name}/versions/{version}/pull", agentHandlers.PullVersion)
 	})
 
 	// Start background notification retry sweeper.
