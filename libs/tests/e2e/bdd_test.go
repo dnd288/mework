@@ -1,3 +1,5 @@
+//go:build e2e
+
 // Package e2e is the executable BDD scenario catalog for MeWork. Each scenario reads as
 // GIVEN/WHEN/THEN and is SKIPPED — the agent-hub target it exercises is not implemented
 // yet (openspec/changes/c0002..c0006), and the implemented baseline keeps its own real

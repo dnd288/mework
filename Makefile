@@ -1,9 +1,9 @@
 # Mello CLI daemon and Mework server — build/test/release targets.
 
 BINARY         := mework
-CMD            := ./cmd/mework
+CMD            := ./apps/mework
 SERVER_BINARY  := mework-server
-SERVER_CMD     := ./cmd/mework-server
+SERVER_CMD     := ./apps/mework-server
 VERSION        ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT         := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE           := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -16,10 +16,10 @@ LDFLAGS        := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X m
 build: build-mework build-mework-server
 
 build-mework:
-	go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY) ./client/cmd/mework
+	go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY) $(CMD)
 
 build-mework-server:
-	go build -ldflags "$(LDFLAGS)" -o bin/$(SERVER_BINARY) ./server/cmd/mework-server
+	go build -ldflags "$(LDFLAGS)" -o bin/$(SERVER_BINARY) $(SERVER_CMD)
 
 server: build-mework-server
 
@@ -45,7 +45,7 @@ test-db:
 lint:
 	golangci-lint run ./... || echo "golangci-lint not installed; skipping"
 	@echo "--- import-guard ---"
-	go test ./tools/import-guard/...
+	cd libs/tools && go test ./import-guard/...
 
 install:
 	go install -ldflags "$(LDFLAGS)" $(CMD)
@@ -61,30 +61,30 @@ clean:
 # ---- Per-module build/test targets ----
 
 build-shared:
-	cd shared && go build ./...
+	cd libs/shared && go build ./...
 
 build-server:
-	cd server && go build ./...
+	cd libs/server && go build ./...
 
 build-client:
-	cd client && go build ./...
+	cd libs/client && go build ./...
 
 build-sandbox:
-	cd sandbox && go build ./...
+	cd libs/sandbox && go build ./...
 
 build-all: build-shared build-server build-client build-sandbox
 
 test-shared:
-	cd shared && go test ./...
+	cd libs/shared && go test ./...
 
 test-server:
-	cd server && go test ./...
+	cd libs/server && go test ./...
 
 test-client:
-	cd client && go test ./...
+	cd libs/client && go test ./...
 
 test-sandbox:
-	cd sandbox && go test ./...
+	cd libs/sandbox && go test ./...
 
 test-all: test-shared test-server test-client test-sandbox
 
