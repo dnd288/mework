@@ -33,11 +33,25 @@ type Engine struct {
 	lastEventID atomic.Value // holds string
 	closed      atomic.Bool
 
+	// sessions is the registry of long-lived interactive sessions keyed by
+	// session id. It guards against re-opening a session on duplicate (SSE
+	// resume/redelivery) open-session dispatches.
+	sessionsMu sync.Mutex
+	sessions   map[string]*Session
+
 	// dispatchHook is set in tests to intercept dispatch processing instead of
 	// calling processDispatch. The hook receives the dispatch and its SSE event ID.
 	// When nil (the normal case), the real lifecycle runs.
 	dispatchHook func(d transport.Dispatch, eventID string)
 }
+
+// processDispatchFn runs the one-shot dispatch lifecycle. It is a package-level
+// variable so tests can intercept the one-shot path.
+var processDispatchFn = processDispatch
+
+// openSessionDispatch drives the open-session (interactive) dispatch path. It is
+// a package-level variable so tests can intercept the session path.
+var openSessionDispatch = processSessionDispatch
 
 // NewEngine creates a new Engine with the given runner identity and hub/catalog
 // URLs. The engine is not started; call Start to begin the subscription loop.
@@ -51,6 +65,7 @@ func NewEngine(runnerID, secret, hubURL, catalogURL string) *Engine {
 		dispatchCh: make(chan transport.Dispatch, 64),
 		eventIDs:   make(chan string, 64),
 		stopCh:     make(chan struct{}),
+		sessions:   make(map[string]*Session),
 	}
 }
 
@@ -59,6 +74,41 @@ func NewEngine(runnerID, secret, hubURL, catalogURL string) *Engine {
 // exact topic for the runner to receive it.
 func DispatchTopic(runnerID string) bus.Topic {
 	return bus.FormatTopic(bus.TopicRunnerDispatch, runnerID)
+}
+
+// registerSession records an open session under its id, returning false if a
+// session is already registered for that id (so the caller can avoid re-opening).
+func (e *Engine) registerSession(id string, s *Session) bool {
+	e.sessionsMu.Lock()
+	defer e.sessionsMu.Unlock()
+	if _, ok := e.sessions[id]; ok {
+		return false
+	}
+	e.sessions[id] = s
+	return true
+}
+
+// lookupSession returns the open session for id, if any.
+func (e *Engine) lookupSession(id string) (*Session, bool) {
+	e.sessionsMu.Lock()
+	defer e.sessionsMu.Unlock()
+	s, ok := e.sessions[id]
+	return s, ok
+}
+
+// removeSession drops a session from the registry (on close/cancel).
+func (e *Engine) removeSession(id string) {
+	e.sessionsMu.Lock()
+	defer e.sessionsMu.Unlock()
+	delete(e.sessions, id)
+}
+
+// hasSession reports whether a session id is already open.
+func (e *Engine) hasSession(id string) bool {
+	e.sessionsMu.Lock()
+	defer e.sessionsMu.Unlock()
+	_, ok := e.sessions[id]
+	return ok
 }
 
 // Start opens the SSE subscription to the runner's dispatch topic and starts
@@ -219,11 +269,34 @@ func (e *Engine) dispatchWorker(ctx context.Context) {
 				secret:     e.secret,
 				client:     e.client,
 			}
-			if err := processDispatch(ctx, d, eventID, opts); err != nil {
+			if err := e.routeDispatch(ctx, d, eventID, opts); err != nil {
 				log.Printf("dispatch processing error: %v", err)
 			}
 		}
 	}
+}
+
+// routeDispatch dispatches one message to the correct lifecycle: a non-empty
+// session id selects the long-lived interactive-session path, everything else
+// stays one-shot. A duplicate open-session dispatch for an already-open session
+// id is idempotent — it is acked and ignored without re-opening the session.
+func (e *Engine) routeDispatch(ctx context.Context, d transport.Dispatch, eventID string, opts processOpts) error {
+	if isOpenSessionDispatch(d) {
+		if e.hasSession(d.Session) {
+			// Duplicate (SSE resume/redelivery): ack and ignore — do not re-open.
+			return opts.client.AckMessage(opts.secret, eventID)
+		}
+		return openSessionDispatch(ctx, e, d, eventID, opts)
+	}
+	return processDispatchFn(ctx, d, eventID, opts)
+}
+
+// isOpenSessionDispatch reports whether a dispatch is an open-session
+// (interactive) dispatch. Such a dispatch carries a session id together with an
+// owner and tenant; a one-shot dispatch uses Session only as a result id and
+// leaves Owner/Tenant empty.
+func isOpenSessionDispatch(d transport.Dispatch) bool {
+	return d.Session != "" && d.Owner != "" && d.Tenant != ""
 }
 
 // reconnect creates a new SSE subscription after a connection drop, with

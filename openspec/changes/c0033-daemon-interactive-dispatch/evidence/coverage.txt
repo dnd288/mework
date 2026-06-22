@@ -1,0 +1,8 @@
+mework/libs/server/bus/sse_handler.go:33:		NewSSEHandler			100.0%
+mework/libs/server/bus/sse_handler.go:49:		Subscribe			80.3%
+mework/libs/server/bus/topics.go:26:			FormatTopic			0.0%
+mework/libs/server/bus/topics.go:32:			FormatChannelTopic		100.0%
+mework/libs/server/bus/topics.go:38:			TopicChannelEvent		100.0%
+mework/libs/server/bus/topics.go:46:			MatchTopic			100.0%
+mework/libs/server/bus/topics.go:60:			matchSegments			100.0%
+total:							(statements)			61.9%

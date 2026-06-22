@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"mework/libs/client/catalog"
 	"mework/libs/client/osproc"
 	"mework/libs/client/runner"
 	"mework/libs/shared/config"
@@ -175,6 +176,15 @@ func runForeground(prof string) error {
 			return fmt.Errorf("not enrolled — run `mework runner enroll --url <hub> --token <reg>` first")
 		}
 	}
+
+	// Wire the catalog-backed definition resolver for interactive (open-session)
+	// dispatches. The local-claude@1.0.0 definition (engine local, backend claude)
+	// resolves over the server catalog; FileDefinitionResolver is the local
+	// fallback. The runner package cannot import catalog directly (import cycle),
+	// so the factory is injected here.
+	runner.SetSessionResolverFactory(func(catalogURL string) runner.DefinitionResolver {
+		return &catalog.HTTPDefinitionResolver{BaseURL: catalogURL}
+	})
 
 	engine := runner.NewEngine(runnerID, secret, cfg.ServerURL, cfg.ServerURL)
 	return engine.Start(ctx)
