@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"mework/libs/client/enroll"
 )
 
 // runnerCmd is the parent grouping command for runner operations.
@@ -52,23 +54,18 @@ var runnerEnrollCmd = &cobra.Command{
 			return fmt.Errorf("required flag(s) \"token\" not set")
 		}
 
-		// "bad-token" simulates a hub rejection for testing.
-		if token == "bad-token" {
-			return fmt.Errorf("enroll: hub rejected token (invalid registration token)")
+		// Exchange the registration token for a durable identity. enroll.Enroll
+		// POSTs to {url}/api/v1/runners/enroll and persists the returned identity
+		// via config.SaveIdentity, so a subsequent `mework daemon start` runs
+		// unattended. A hub rejection surfaces here as a command error.
+		id, err := enroll.Enroll(cmd.Context(), url, token)
+		if err != nil {
+			return fmt.Errorf("enroll: %w", err)
 		}
 
-		runnerID := fmt.Sprintf("runner-%x", []byte(token)[:quickLen(token)])
-		fmt.Fprintf(out, "already enrolled. RunnerID: %s\n", runnerID)
+		fmt.Fprintf(out, "enrolled. RunnerID: %s\n", id.RunnerID)
 		return nil
 	},
-}
-
-// quickLen returns the length of s, capped at 8.
-func quickLen(s string) int {
-	if len(s) < 8 {
-		return len(s)
-	}
-	return 8
 }
 
 func init() {

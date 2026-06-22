@@ -1,0 +1,8 @@
+mework/libs/client/cli/provider.go:63:		init			100.0%
+mework/libs/client/cli/root.go:35:		init			100.0%
+mework/libs/client/cli/root.go:59:		profile			0.0%
+mework/libs/client/cli/root.go:67:		Execute			0.0%
+mework/libs/client/cli/runtime.go:123:		init			100.0%
+mework/libs/client/cli/ticket.go:187:		init			100.0%
+mework/libs/client/enroll/enroll.go:18:		Enroll			76.2%
+total:						(statements)		47.0%
