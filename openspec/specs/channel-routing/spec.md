@@ -3,9 +3,7 @@
 ## Purpose
 
 Define how `mework-server` routes incoming events from any provider to a per-resource sandbox session through a channel-addressed routing layer. The channel router decouples event sources from sandbox execution, enabling provider-agnostic, resource-scoped event delivery. Owned by `libs/server/channel/`.
-
 ## Requirements
-
 ### Requirement: Channel key computation
 
 The channel router SHALL compute a deterministic channel key from every incoming event using the format `(provider_code, external_resource_id)`. The key SHALL be a colon-joined string: `"mello:ticket-abc123"`.
@@ -46,3 +44,23 @@ The channel router SHALL expose a status endpoint at `GET /api/v1/channels` list
 
 - **WHEN** an authenticated user requests `GET /api/v1/channels`
 - **THEN** the response includes all active channel sessions with their metadata
+
+### Requirement: Channel routing is opt-in and disabled by default
+
+Channel routing (per-resource session auto-provisioning) SHALL be **disabled by default** and
+enabled only by explicit configuration. When disabled, verified webhook events SHALL be handled
+by the legacy pipeline (enqueue → claim → write-back) with no dependence on the channel
+auto-provisioner. The feature flag SHALL be configurable via environment so an operator can opt
+in (e.g. for end-to-end testing) without a code change.
+
+#### Scenario: Default deployment uses the legacy pipeline
+
+- **WHEN** the server starts without channel routing explicitly enabled
+- **THEN** channel routing is off and verified webhooks are handled by the legacy
+  enqueue/claim/write-back pipeline
+
+#### Scenario: Channel routing can be enabled by configuration
+
+- **WHEN** the channel-routing environment flag is set to enabled
+- **THEN** the server activates channel routing for that deployment
+
