@@ -2,11 +2,17 @@ package hub
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"mework/libs/server/bus"
 	"mework/libs/server/storage"
 )
+
+// minKeyLen is the minimum length for the server HMAC key and the secret-sealing
+// key, so a trivially-weak (e.g. 1-character) key is rejected at startup rather
+// than silently accepted and stretched by SHA-256.
+const minKeyLen = 16
 
 // Config holds the environment configuration for the mework server.
 type Config struct {
@@ -45,10 +51,16 @@ func LoadConfig() (*Config, error) {
 	if serverKey == "" {
 		return nil, errors.New("SERVER_KEY is required but not set")
 	}
+	if len(serverKey) < minKeyLen {
+		return nil, fmt.Errorf("SERVER_KEY must be at least %d characters", minKeyLen)
+	}
 
 	meworkSecretKey := os.Getenv("MEWORK_SECRET_KEY")
 	if meworkSecretKey == "" {
 		return nil, errors.New("MEWORK_SECRET_KEY is required but not set")
+	}
+	if len(meworkSecretKey) < minKeyLen {
+		return nil, fmt.Errorf("MEWORK_SECRET_KEY must be at least %d characters", minKeyLen)
 	}
 
 	melloBaseURL := os.Getenv("MELLO_BASE_URL")

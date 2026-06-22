@@ -27,6 +27,9 @@ import (
 	"mework/libs/shared/grant"
 )
 
+// maxRequestBytes bounds request body size to mitigate memory-exhaustion DoS.
+const maxRequestBytes = 4 << 20 // 4 MiB
+
 type Server struct {
 	Router              *chi.Mux
 	Pool                *pgxpool.Pool
@@ -42,8 +45,14 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+	// Cap request bodies to bound memory use (e.g. webhook payloads read via
+	// io.ReadAll). SSE responses are unaffected — this limits the request body,
+	// not the long-lived response stream.
+	r.Use(chimiddleware.RequestSize(maxRequestBytes))
 
 	r.Get("/healthz", HealthHandler(pool))
+	r.Get("/livez", LivenessHandler())
+	r.Get("/readyz", ReadinessHandler(pool))
 
 	patAuth := auth.NewPATAuthenticator(pool, cfg.MelloBaseURL)
 	registrySvc := registry.NewService(pool, cfg.ServerKey)

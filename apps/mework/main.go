@@ -68,6 +68,10 @@ func runHub(ctx context.Context, listen string) error {
 	httpServer := &http.Server{
 		Addr:    cfg.ListenAddr,
 		Handler: srvInstance,
+		// Slowloris mitigation; no WriteTimeout (SSE is long-lived), IdleTimeout
+		// exceeds the SSE heartbeat. Mirrors apps/mework-server.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// 5. Graceful shutdown on SIGINT/SIGTERM (or parent context cancel).

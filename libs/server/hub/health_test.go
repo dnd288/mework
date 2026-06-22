@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +21,31 @@ func TestHealthHandler_NilPool(t *testing.T) {
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected status 503, got %d", w.Code)
+	}
+}
+
+func TestLivenessHandler_AlwaysOK(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
+	w := httptest.NewRecorder()
+
+	LivenessHandler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("liveness must be 200 regardless of DB, got %d", w.Code)
+	}
+}
+
+func TestReadinessHandler_NilPoolNoLeak(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+
+	ReadinessHandler(nil).ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("readiness with nil pool must be 503, got %d", w.Code)
+	}
+	if body := w.Body.String(); !strings.Contains(body, "not ready") {
+		t.Errorf("readiness body = %q, want generic 'not ready'", body)
 	}
 }
 

@@ -50,6 +50,11 @@ func main() {
 	httpServer := &http.Server{
 		Addr:    cfg.ListenAddr,
 		Handler: srvInstance,
+		// Bound header-read time to mitigate slowloris. No WriteTimeout: SSE
+		// streams are long-lived. IdleTimeout exceeds the SSE heartbeat so kept-
+		// alive stream connections are not closed prematurely.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// 5. Graceful shutdown handler
