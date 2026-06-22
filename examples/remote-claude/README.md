@@ -1,10 +1,12 @@
 # Remote Claude Code — Session-Based Interactive AI
 
 This example demonstrates how **mework** turns a local Claude Code installation into a
-**remotely controlled AI agent**. Instead of running Claude Code directly in your
-terminal, you create a **session** on the mework server, and any authorized client can
-send prompts and receive responses — from another terminal, another machine, or an
-automated pipeline.
+**remotely controlled AI agent**. The **agent, its daemon, and its sandbox all run on
+your own machine (the runner / client)** — Claude Code is never executed on the server.
+You enroll the runner once, then create a **session** through the mework server, and any
+authorized client can send prompts and receive responses — from another terminal,
+another machine, or an automated pipeline. The server only brokers the session; the
+work happens on the client, so source code and provider credentials stay local.
 
 ## Concept
 
@@ -47,9 +49,18 @@ agent, so source code and provider credentials stay on the runner.
 ## What this proves
 
 1. **Claude Code runs as a managed session** — not tied to your terminal
-2. **Multiple clients can interact** — push messages, receive events
-3. **Session persists across disconnects** — resume from another machine
-4. **Same Claude Code experience** — multi-turn chat, file access, tool use
+2. **The agent, daemon, and sandbox all run on the client** — never on the server; source + credentials stay local
+3. **Multiple clients can interact** — push messages, receive events
+4. **Session persists across disconnects** — resume from another machine
+5. **Same Claude Code experience** — multi-turn chat, file access, tool use
+
+## Where things run
+
+| Tier | Runs | Responsibility |
+|------|------|----------------|
+| **mework-server** | a host you point clients at | Gateway + registry only: session metadata, agent/definition catalog, message-bus topics. **Never** spawns a sandbox or runs Claude. |
+| **Runner (client machine)** | **the daemon + sandbox + Claude Code (agent)** | Enrolls once, subscribes over SSE, runs the agent locally in a sandbox, streams events back. Source + credentials live here. |
+| **Remote clients** | terminals / UIs / pipelines | Create/attach/push/close over HTTP+SSE; drive the agent without ever touching the runner directly. |
 
 ## Prerequisites
 
@@ -95,7 +106,7 @@ DELETE /api/v1/sessions/{id}
 
 ## Running the example
 
-### 1. Start mework-server
+### 1. Start mework-server *(on the server host)*
 
 ```bash
 export DATABASE_URL="postgres://postgres:postgres@localhost:5432/mework"
@@ -104,7 +115,9 @@ export MEWORK_SECRET_KEY="demo-secret-key-32bytes!"
 ./bin/mework-server
 ```
 
-### 2. Enroll a runner
+### 2. Enroll a runner *(on the client machine where Claude Code is installed)*
+
+This is the machine that will run the daemon, the sandbox, and Claude Code itself.
 
 ```bash
 # Issue registration token (needs PAT auth)
@@ -118,7 +131,7 @@ curl -s -X POST http://localhost:8080/api/v1/runners/enroll \
   -d '{"code":"remote-agent","label":"Claude Code Runner","specs":["claude-code"]}'
 ```
 
-### 3. Create a session
+### 3. Create a session *(from any remote client)*
 
 ```bash
 SESSION=$(curl -s -X POST http://localhost:8080/api/v1/sessions \
@@ -127,7 +140,10 @@ SESSION=$(curl -s -X POST http://localhost:8080/api/v1/sessions \
 echo "Session: $SESSION"
 ```
 
-### 4. Chat with Claude remotely
+### 4. Chat with Claude remotely *(from any remote client)*
+
+The prompt is routed by the server to the runner, where Claude executes in its sandbox;
+responses stream back over SSE.
 
 ```bash
 # Push a message

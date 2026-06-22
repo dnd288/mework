@@ -1,8 +1,11 @@
 // Package remote_claude_test demonstrates how mework turns a local Claude Code
 // installation into a remotely controllable AI agent through the sandbox system.
 //
-// This test exercises the REAL Claude Code binary through the local sandbox
-// driver, proving that:
+// The agent, its daemon, and its sandbox all run on the client machine (the
+// runner) — Claude Code is never executed on the server; the server only brokers
+// the session. This test exercises that client-side path directly: it runs the
+// REAL Claude Code binary through the local sandbox driver in-process, proving
+// that:
 //   - Claude Code can be invoked as a managed subprocess
 //   - Prompts go over stdin (never argv — security invariant)
 //   - The agent produces actionable responses
