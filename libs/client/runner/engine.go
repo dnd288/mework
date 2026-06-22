@@ -54,10 +54,17 @@ func NewEngine(runnerID, secret, hubURL, catalogURL string) *Engine {
 	}
 }
 
+// DispatchTopic returns the dispatch topic the Engine subscribes to for the
+// given runner id. The server's session/agent dispatch must publish to this
+// exact topic for the runner to receive it.
+func DispatchTopic(runnerID string) bus.Topic {
+	return bus.FormatTopic(bus.TopicRunnerDispatch, runnerID)
+}
+
 // Start opens the SSE subscription to the runner's dispatch topic and starts
 // the event-reader, dispatch-worker, and presence-ticker goroutines.
 func (e *Engine) Start(ctx context.Context) error {
-	topic := bus.FormatTopic(bus.TopicRunnerDispatch, e.runnerID)
+	topic := DispatchTopic(e.runnerID)
 
 	lid, _ := e.lastEventID.Load().(string)
 	stream, err := e.client.Subscribe(e.secret, []string{string(topic)}, lid)

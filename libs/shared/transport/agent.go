@@ -32,11 +32,15 @@ type Artifact struct {
 	Content []byte   `json:"content"`
 }
 
-// Dispatch is a message published to a runner's dispatch topic.
+// Dispatch is a message published to a runner's dispatch topic. A non-empty
+// Session marks an open-session dispatch (the daemon opens a long-lived
+// sandbox); Owner and Tenant let the runner authorize the session's turns.
 type Dispatch struct {
-	Agent      AgentRef         `json:"agent"`
-	Grant      json.RawMessage  `json:"grant"`
-	Session    string           `json:"session,omitempty"`
-	Runner     string           `json:"runner"`
-	ChannelKey string           `json:"channel_key,omitempty"`
+	Agent      AgentRef        `json:"agent"`
+	Grant      json.RawMessage `json:"grant"`
+	Session    string          `json:"session,omitempty"`
+	Owner      string          `json:"owner,omitempty"`
+	Tenant     string          `json:"tenant,omitempty"`
+	Runner     string          `json:"runner"`
+	ChannelKey string          `json:"channel_key,omitempty"`
 }

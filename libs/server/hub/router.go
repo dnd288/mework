@@ -72,6 +72,7 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	msgAckHandler := bus.NewAckHandler(msgBroker)
 
 	sessionMgr := session.NewManager(msgBroker, session.DefaultConfig())
+	sessionHandlers := session.NewHandlers(sessionMgr, agentHandlers)
 
 	autoProvisioner := channel.NewAutoProvisioner(registrySvc, channelReg, sessionMgr, agentHandlers, msgBroker, registry.DefaultTenantID)
 	channelRouter := channel.NewRouter(channelReg, msgBroker, autoProvisioner, channelFeature)
@@ -137,9 +138,24 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 
 		// Channel sessions endpoint: list active channel bindings.
 		r.Get("/channels", channelHandlers.ListChannels)
+
+		// Interactive session lifecycle (c0031): create dispatches an
+		// open-session message to the named runner; owner/tenant come from
+		// the authenticated PAT, never from request args.
+		r.Post("/sessions", sessionHandlers.CreateSession)
+		r.Get("/sessions", sessionHandlers.ListSessions)
+		r.Get("/sessions/{id}", sessionHandlers.GetSession)
+		r.Delete("/sessions/{id}", sessionHandlers.CloseSession)
 	})
 
 	r.Post("/api/v1/runners/enroll", registryHandlers.EnrollRunner)
+
+	// Runner session result sink (c0031): the daemon POSTs a terminal result
+	// here. Runtime-authed (rt_ Bearer), same authenticator as jobs/subscribe.
+	r.Route("/api/v1/runners/sessions", func(r chi.Router) {
+		r.Use(runtimeAuth.Middleware)
+		r.Post("/{id}/result", sessionHandlers.ResultSession)
+	})
 
 	r.Route("/api/v1/agents", func(r chi.Router) {
 		r.Use(runtimeAuth.Middleware)

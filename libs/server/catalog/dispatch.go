@@ -97,6 +97,51 @@ func (h *AgentHandlers) dispatch(ctx context.Context, agentName, version, runner
 	return h.broker.Publish(ctx, topic, bus.Message{Payload: payload})
 }
 
+// DispatchSessionToRunner publishes an open-session dispatch to the named
+// runner. A non-empty session id marks this as an open-session dispatch; the
+// daemon (c0033) branches on it to open a long-lived sandbox rather than run a
+// one-shot agent. Owner and tenant ride along so the runner can authorize the
+// session's turns. It publishes to the same topic the daemon Engine subscribes
+// to for runnerID, so the two are guaranteed to match.
+func (h *AgentHandlers) DispatchSessionToRunner(ctx context.Context, agentName, runnerID, sessionID, owner, tenant string, g *grant.Grant) error {
+	if g == nil {
+		return fmt.Errorf("dispatch requires a grant")
+	}
+	if agentName == "" {
+		return fmt.Errorf("agent name is required")
+	}
+
+	exists, err := h.agentExists(ctx, agentName)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrNotFound
+	}
+
+	grantJSON, err := json.Marshal(g)
+	if err != nil {
+		return fmt.Errorf("marshal grant: %w", err)
+	}
+
+	msg := transport.Dispatch{
+		Agent:   transport.AgentRef{Name: agentName},
+		Grant:   grantJSON,
+		Session: sessionID,
+		Owner:   owner,
+		Tenant:  tenant,
+		Runner:  runnerID,
+	}
+
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshal dispatch: %w", err)
+	}
+
+	topic := bus.FormatTopic(bus.TopicRunnerDispatch, runnerID)
+	return h.broker.Publish(ctx, topic, bus.Message{Payload: payload})
+}
+
 // DispatchVersionToRunner publishes a dispatch message for a specific agent version.
 func (h *AgentHandlers) DispatchVersionToRunner(ctx context.Context, agentName, version, runnerID string, g *grant.Grant) error {
 	return h.dispatch(ctx, agentName, version, runnerID, g, "")
