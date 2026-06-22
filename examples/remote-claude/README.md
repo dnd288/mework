@@ -1,197 +1,154 @@
 # Remote Claude Code — Session-Based Interactive AI
 
-This example demonstrates how **mework** turns a local Claude Code installation into a
-**remotely controlled AI agent**. The **agent, its daemon, and its sandbox all run on
-your own machine (the runner / client)** — Claude Code is never executed on the server.
-You enroll the runner once, then create a **session** through the mework server, and any
-authorized client can send prompts and receive responses — from another terminal,
-another machine, or an automated pipeline. The server only brokers the session; the
-work happens on the client, so source code and provider credentials stay local.
+This example turns a local Claude Code install into a **remotely controlled AI agent** with
+**three commands**:
+
+```bash
+mework server start          # 1. the hub (gateway + registry)
+mework daemon start          # 2. the local runner (after login + enroll)
+mework sandbox start -w .     # 3. this folder, as a running worker you can message by id
+```
+
+The **agent, its daemon, and its sandbox all run on your machine (the runner)** — Claude Code
+is never executed on the server. The server only brokers sessions over a message bus, so
+**source code and provider credentials stay local**. Once a workspace is running as a worker,
+any authorized client messages it **by session id** — from another terminal, machine, or a
+pipeline.
 
 ## Concept
 
 ```
-        mework-server  (gateway + registry only)
+        mework server  (gateway + registry only)
 ┌─────────────────────────────────────────────────────┐
-│  ┌──────────┐   session.<id>.control (bus topic)     │
-│  │ Session  │   • session metadata                   │
-│  │ Manager  │   • agent / definition catalog         │
-│  │  create  │   • message-bus topics                 │
-│  │  attach  │                                         │
-│  │  close   │   (never spawns a sandbox)             │
-│  └────┬─────┘                                         │
-└───────┼──────────────────────────────────────────────┘
-        │  HTTP (/api/v1/sessions)        ▲
-        │                                 │ SSE subscribe
-        ▼                                 │  (bus push/pull)
-┌─────────────────┐            ┌──────────┴───────────────┐
-│    Client A     │            │  Runner — CLIENT MACHINE  │
-│   (remote UI)   │            │                           │
-└─────────────────┘            │  ┌──────────┐             │
-┌─────────────────┐            │  │  daemon  │             │
-│    Client B     │            │  │ (runner) │             │
-│   (remote UI)   │            │  │          │ ┌─────────┐ │
-└─────────────────┘            │  │          │▶│ Claude  │ │
-                               │  │          │ │(sandbox)│ │
-   Clients drive the agent     │  │          │◀│ stdin/  │ │
-   over HTTP+SSE; they never   │  └──────────┘ │ stdout  │ │
-   touch the runner directly.  │               └─────────┘ │
-                               │  source + creds stay here │
-                               └───────────────────────────┘
+│  session.<id>.input   (hub → runner: chat turns)     │
+│  session.<id>.control (runner → hub: token/done/…)   │
+│  • session metadata   • agent/definition catalog     │
+│  • message-bus topics  (never spawns a sandbox)       │
+└───────┬───────────────────────────────▲──────────────┘
+        │ HTTP /api/v1/sessions          │ SSE subscribe
+        │ (create / send / stream)       │ (bus push/pull)
+        ▼                                │
+┌─────────────────┐            ┌─────────┴─────────────────┐
+│  Client / CLI   │            │  Runner — YOUR MACHINE     │
+│  session send   │            │  ┌──────────┐              │
+│  session attach │            │  │  daemon  │ ┌──────────┐ │
+│  sandbox start  │            │  │ (runner) │▶│  Claude  │ │
+└─────────────────┘            │  │          │ │(sandbox) │ │
+                               │  │          │◀│ stdin/out│ │
+   Clients drive the worker    │  └──────────┘ └──────────┘ │
+   over HTTP+SSE by session id. │  source + creds stay here  │
+                               └────────────────────────────┘
 ```
 
-The **daemon and the sandbox run on the client's machine (the runner)**, never on
-the server. `mework-server` is a **gateway + registry** only: it holds session
-metadata, the agent/definition catalog, and the message-bus topics, and routes
-between remote clients and the runner. It never spawns a sandbox or executes an
-agent, so source code and provider credentials stay on the runner.
-
-## What this proves
-
-1. **Claude Code runs as a managed session** — not tied to your terminal
-2. **The agent, daemon, and sandbox all run on the client** — never on the server; source + credentials stay local
-3. **Multiple clients can interact** — push messages, receive events
-4. **Session persists across disconnects** — resume from another machine
-5. **Same Claude Code experience** — multi-turn chat, file access, tool use
+`mework server` is a **gateway + registry** only: it holds session metadata, the
+agent/definition catalog, and the message-bus topics, and routes between clients and the
+runner. The **daemon and sandbox run on the runner**; the server never spawns a sandbox or
+runs Claude.
 
 ## Where things run
 
 | Tier | Runs | Responsibility |
 |------|------|----------------|
-| **mework-server** | a host you point clients at | Gateway + registry only: session metadata, agent/definition catalog, message-bus topics. **Never** spawns a sandbox or runs Claude. |
-| **Runner (client machine)** | **the daemon + sandbox + Claude Code (agent)** | Enrolls once, subscribes over SSE, runs the agent locally in a sandbox, streams events back. Source + credentials live here. |
-| **Remote clients** | terminals / UIs / pipelines | Create/attach/push/close over HTTP+SSE; drive the agent without ever touching the runner directly. |
+| **server** (`mework server start` or docker compose) | a host you point clients at | Gateway + registry: session metadata, catalog, bus topics. **Never** runs Claude. |
+| **runner** (`mework daemon start`) | **the daemon + sandbox + Claude Code** | Enrolls once, subscribes over SSE, opens the sandbox locally, streams events back. Source + creds live here. |
+| **clients** (`mework session …` / `mework sandbox …`) | terminals / pipelines | Start a workspace as a worker, then send turns / stream events by session id. |
 
 ## Prerequisites
 
-- Go 1.25+
-- Postgres running (for mework-server)
-- Claude Code installed (`claude` in PATH)
-- mework binaries built (`make build` or `go build ./...`)
+- Go 1.25+ and the `mework` binary built (`make build`, or `go build ./apps/mework`)
+- Postgres — run it yourself, or `docker compose up -d` (see below)
+- Claude Code installed (`claude` in PATH) on the runner machine
+- A `mework.yml` in your workspace folder (see [`testdata/workspace/mework.yml`](testdata/workspace/mework.yml))
 
-## How it works
+## Quick start — three components
 
-### Architecture
+### 1. Start the hub
 
-The mework session system provides:
-
-| Concept | Implementation |
-|---------|----------------|
-| **Session** | A tracked conversation with lifecycle (create → attach → close) |
-| **Control channel** | Bus topic `session.<id>.control` — push messages to the agent |
-| **SSE stream** | Subscriber receives events from the session in real-time |
-| **Sandbox** | Claude Code runs as an isolated subprocess on the runner (the client's machine), never on the server |
-| **Conversation** | Multi-turn chat with history, streaming tokens, cancel |
-
-### API Flow
-
-```bash
-# 1. Create a session (returns session ID)
-POST /api/v1/sessions
-{"agent_name": "claude-code", "runner": "<runner_id>"}
-
-# 2. Attach to the session (get SSE stream URL)
-GET /api/v1/sessions/{id}/attach
-
-# 3. Push a message to the agent
-POST /api/v1/sessions/{id}/push
-{"content": "Review the code in /workspace for bugs"}
-
-# 4. Receive streaming response via SSE
-#    Events: token | message | done | error
-
-# 5. Close the session when done
-DELETE /api/v1/sessions/{id}
-```
-
-## Running the example
-
-### 1. Start mework-server *(on the server host)*
+Locally, in-process:
 
 ```bash
 export DATABASE_URL="postgres://postgres:postgres@localhost:5432/mework"
 export SERVER_KEY="demo-key"
-export MEWORK_SECRET_KEY="demo-secret-key-32bytes!"
-./bin/mework-server
+export MEWORK_SECRET_KEY="demo-secret-key-32bytes!!"
+mework server start --listen :8080
 ```
 
-### 2. Enroll a runner *(on the client machine where Claude Code is installed)*
-
-This is the machine that will run the daemon, the sandbox, and Claude Code itself.
+…or bring up the server tier (hub + Postgres) with Docker:
 
 ```bash
-# Issue registration token (needs PAT auth)
-TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/runners/registration-tokens \
-  -H "Authorization: Bearer your-pat" \
-  -d '{"tenant_id": "00000000-0000-0000-0000-000000000001"}' | jq -r '.token')
-
-# Enroll runner with specs
-curl -s -X POST http://localhost:8080/api/v1/runners/enroll \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"code":"remote-agent","label":"Claude Code Runner","specs":["claude-code"]}'
+docker compose up -d          # from examples/remote-claude/
+export MEWORK_SERVER_URL=http://localhost:8080
 ```
 
-### 3. Create a session *(from any remote client)*
+(`mework server start` and the `mework-server` compose service serve the same hub.)
+
+### 2. Log in, enroll the runner, start the daemon
+
+On the machine where Claude Code is installed:
 
 ```bash
-SESSION=$(curl -s -X POST http://localhost:8080/api/v1/sessions \
-  -H "Authorization: Bearer your-pat" \
-  -d '{"agent_name":"claude-code","runner":"<runner_id>"}' | jq -r '.id')
-echo "Session: $SESSION"
+mework login --token <your-mello-pat>
+
+# Issue a one-time registration token (PAT-authed), then enroll this machine:
+REG=$(curl -s -X POST "$MEWORK_SERVER_URL/api/v1/runners/registration-tokens" \
+        -H "Authorization: Bearer <your-mello-pat>" | jq -r .token)
+mework runner enroll --url "$MEWORK_SERVER_URL" --token "$REG"   # writes ~/.mework/identity.json
+
+mework daemon start            # subscribes over SSE; ready to open sandboxes
 ```
 
-### 4. Chat with Claude remotely *(from any remote client)*
+### 3. Turn this folder into a running worker
 
-The prompt is routed by the server to the runner, where Claude executes in its sandbox;
-responses stream back over SSE.
+From a workspace folder containing a `mework.yml`:
 
 ```bash
-# Push a message
-curl -s -X POST "http://localhost:8080/api/v1/sessions/$SESSION/push" \
-  -H "Content-Type: application/json" \
-  -d '{"content":"Write a simple Go HTTP server"}'
+SID=$(mework sandbox start -w . --json | jq -r .id)   # server → dispatch → daemon opens the sandbox bound to .
+mework sandbox list                                    # shows SID, agent, status
 
-# Attach and stream the response via SSE
-curl -s -N "http://localhost:8080/api/v1/sessions/$SESSION/attach"
+# stream the worker's events in one terminal:
+mework session attach "$SID"
+
+# …message it by id from another terminal (sandbox send == session send):
+mework sandbox send "$SID" "summarize this repo and list the entry points"
+
+mework sandbox stop "$SID"     # close the worker (also: mework session close)
 ```
 
-## Standalone test
+The turn travels CLI → server (`session.<id>.input`) → daemon → the long-lived sandbox over
+**stdin (never argv)**; `token`/`message`/`done` events stream back over `session.<id>.control`
+to your attached terminal.
 
-The Go test in this directory demonstrates the full flow:
+## HTTP API (what the CLI calls)
 
-```bash
-cd examples/remote-claude
-go test -v -count=1 -run TestRemoteClaude
-```
-
-This test:
-1. Detects Claude Code on the local machine
-2. Creates a session through the sandbox engine
-3. Sends a prompt and captures the AI response
-4. Verifies Claude Code was invoked correctly
-5. Shows the output
+| Method & path | Auth | Purpose |
+|---|---|---|
+| `POST /api/v1/sessions` | PAT | Create a session. Body: `{agent_name, version?, runner, workspace?}`. A `workspace` path binds the sandbox to that local dir. |
+| `GET /api/v1/sessions` / `GET /api/v1/sessions/{id}` | PAT | List / get sessions (tenant-scoped). |
+| `POST /api/v1/sessions/{id}/messages` | PAT | Submit a chat turn: `{role:"user", content}`. |
+| `GET /api/v1/sessions/{id}/stream` | PAT | SSE stream of `token`/`message`/`done`/`error` events. |
+| `DELETE /api/v1/sessions/{id}` | PAT | Close the session. |
+| `POST /api/v1/runners/sessions/{id}/result` · `/events` | runtime (`rt_`) | Daemon-only: report terminal result / republish events. |
 
 ## Workspace-bound sessions
 
-A session can be **bound to a workspace directory** so the agent reads and writes
-files in place. The workspace carries its own definition in a `mework.yml` (plus
-optional `.claude/settings.json`), and the very same fixture drives **two start
-modes**:
+A session is **bound to a workspace directory** so the agent reads and writes files in place.
+The workspace carries its own definition in a `mework.yml` (plus optional
+`.claude/settings.json`). `mework sandbox start -w .` sends the workspace's **absolute path**
+on the create request; the daemon resolves the definition from `<dir>/mework.yml` and binds
+the sandbox to the directory.
 
-- **Local-direct** *(no server, no Postgres)* — a `FileDefinitionResolver` reads
-  `mework.yml` from the workspace dir, you mint a local `OpSpawn` grant, and
-  `runner.StartWorkspaceSession` opens a session whose sandbox is bound to that
-  dir. Nothing contacts the server.
-- **Server** — the same metadata is published to the catalog
-  (`POST /api/v1/agents/{name}/versions`), resolved back with an
-  `HTTPDefinitionResolver`, and a (server-issued) grant authorizes the run. The
-  **agent still runs as a sandbox on the client** — the server is a gateway +
-  registry only and never spawns a sandbox.
+The same fixture also drives **two library start modes** (exercised by the tests):
 
-In both modes the turn text is fed to the backend over **stdin (never argv)**,
-the backend runs with its CWD set to the bound workspace, and produced artifacts
-persist on disk and are **readable back** (list / read / update) via
-`workspacefs.NewLocal`.
+- **Local-direct** *(no server, no Postgres)* — a `FileDefinitionResolver` reads `mework.yml`,
+  you mint a local `OpSpawn` grant, and `runner.StartWorkspaceSession` opens a session whose
+  sandbox is bound to the dir. Nothing contacts the server.
+- **Server** — the workspace path flows through `POST /api/v1/sessions` → dispatch → daemon,
+  which resolves `mework.yml` locally and binds the dir. The **agent still runs as a sandbox
+  on the runner** — the server never spawns one.
+
+In both modes the turn text is fed over **stdin (never argv)**, the backend runs with its CWD
+set to the bound workspace, and produced artifacts persist on disk and are **readable back**
+(list / read / update) via `workspacefs.NewLocal`.
 
 ### `mework.yml`
 
@@ -202,48 +159,47 @@ engine: local        # local | docker | cloudflare | custom
 backend: claude       # command[0]; the turn arrives on stdin
 ```
 
-The local engine runs `backend` as `command[0]` with the process working
-directory set to the workspace. (The example test rewrites `backend` to the
-absolute path of `testdata/stub-backend.sh` so the run is deterministic and needs
-no real Claude Code.)
+The local engine runs `backend` as `command[0]` with the working directory set to the
+workspace. (The example test rewrites `backend` to the absolute path of
+`testdata/stub-backend.sh` so the run is deterministic and needs no real Claude Code.)
 
 ### Pack → push → pull
 
-A bound workspace round-trips through the catalog bundle form:
+A bound workspace round-trips through the catalog bundle form (also exposed as
+`mework workspace pack|push|pull`):
 
-- **Pack** — `catalog.Pack(dir)` zips the workspace (`mework.yml`,
-  `.claude/settings.json`, and ordinary files, preserving nested paths) into a
-  bundle you push to the server.
-- **Pull** — `catalog.ExtractWorkspace(bundle, dest)` recreates the workspace in a
-  fresh directory with identical contents, ready to start a session against.
+- **Pack** — `catalog.Pack(dir)` zips the workspace (`mework.yml`, `.claude/settings.json`, and
+  ordinary files, preserving nested paths) into a bundle.
+- **Pull** — `catalog.ExtractWorkspace(bundle, dest)` recreates the workspace in a fresh dir
+  with identical contents, ready to start a session against.
 
-### Workspace example test
+## Tests
 
 ```bash
 cd examples/remote-claude
+
+# Real Claude Code via the local sandbox driver (skips if `claude` is not installed):
+go test -v -count=1 -run TestRemoteClaude
+
+# Deterministic workspace flows with a stub backend (no real Claude, CI-safe):
 go test -v -count=1 -run TestWorkspaceSession
 ```
 
-The suite proves the whole feature with a deterministic stub backend:
+`TestWorkspaceSession` proves the feature with a deterministic stub backend:
 
-1. **`TestWorkspaceSession_LocalDirect`** — local-direct start (no DB): resolve
-   from `mework.yml`, send a task over stdin, assert the artifact lands in the
-   bound workspace.
-2. **`TestWorkspaceSession_PackPushPullRoundTrip`** — pack the workspace, pull it
-   into a fresh dir, assert `mework.yml` + `.claude/settings.json` + files
-   round-trip.
-3. **`TestWorkspaceSession_ArtifactsReadableBack`** — after a turn, list / read /
-   update / re-read the produced artifact via `workspacefs`.
-4. **`TestWorkspaceSession_ServerMode`** — Postgres-gated (`TEST_DATABASE_URL`):
-   stand up a real `hub.NewServer` behind `httptest`, register the definition,
-   resolve it over HTTP, and run the bound session on the client. Skips cleanly
-   when `TEST_DATABASE_URL` is unset.
+1. **`TestWorkspaceSession_LocalDirect`** — local-direct start (no DB): resolve from
+   `mework.yml`, send a task over stdin, assert the artifact lands in the bound workspace.
+2. **`TestWorkspaceSession_PackPushPullRoundTrip`** — pack the workspace, pull it into a fresh
+   dir, assert `mework.yml` + `.claude/settings.json` + files round-trip.
+3. **`TestWorkspaceSession_ArtifactsReadableBack`** — after a turn, list / read / update /
+   re-read the produced artifact via `workspacefs`.
+4. **`TestWorkspaceSession_ServerMode`** — Postgres-gated (`TEST_DATABASE_URL`): stand up a
+   real `hub.NewServer` behind `httptest`, register the definition, resolve it over HTTP, and
+   run the bound session on the client. Skips cleanly when `TEST_DATABASE_URL` is unset.
 
 ## Extending
 
-The same pattern works for:
-- **Chat mode**: Start a long-lived session with conversation history
-- **File access**: Mount workspace directories into the sandbox
-- **Tool use**: Register MCP tools that the remote Claude can invoke
-- **Multi-agent**: Run different Claude instances for different tasks
-- **CI/CD**: Trigger Claude from pipelines, capture results
+- **Multi-turn chat** — `sandbox start` opens a long-lived sandbox; keep sending turns by id.
+- **File access** — the bound workspace is the agent's working dir; artifacts persist on disk.
+- **Multiple workers** — start several workspaces; each is a session addressable by its id.
+- **CI/CD** — script `sandbox start --json` + `session send` + `session attach` in a pipeline.
