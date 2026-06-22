@@ -9,36 +9,40 @@ automated pipeline.
 ## Concept
 
 ```
+        mework-server  (gateway + registry only)
 ┌─────────────────────────────────────────────────────┐
-│                   mework-server                      │
-│                                                      │
 │  ┌──────────┐   session.<id>.control (bus topic)     │
-│  │ Session  │◄────────────────────────────────────┐  │
-│  │ Manager  │                                     │  │
-│  │          │  Push(msg) → topic                  │  │
-│  │  create  │  Events() ← topic                   │  │
-│  │  attach  │                                     │  │
-│  │  close   │                                     │  │
-│  └──────────┘                                     │  │
-│        │                                          │  │
-│        ▼                                          │  │
-│  ┌──────────┐     SSE subscribe                   │  │
-│  │  Worker  │◄────────────────────────────────────┘  │
-│  │ (daemon) │                                        │
-│  │          │     ┌──────────────┐                   │
-│  │          │────▶│  Claude Code │  stdin/stdout     │
-│  │          │     │  (sandbox)   │                   │
-│  │          │◀────│              │                   │
-│  └──────────┘     └──────────────┘                   │
-└─────────────────────────────────────────────────────┘
-        ▲                                        ▲
-        │  HTTP (/api/v1/sessions)               │ SSE
-        │                                        │
-   ┌─────────┐                             ┌─────────┐
-   │ Client A│                             │ Client B│
-   │ (remote)│                             │ (remote)│
-   └─────────┘                             └─────────┘
+│  │ Session  │   • session metadata                   │
+│  │ Manager  │   • agent / definition catalog         │
+│  │  create  │   • message-bus topics                 │
+│  │  attach  │                                         │
+│  │  close   │   (never spawns a sandbox)             │
+│  └────┬─────┘                                         │
+└───────┼──────────────────────────────────────────────┘
+        │  HTTP (/api/v1/sessions)        ▲
+        │                                 │ SSE subscribe
+        ▼                                 │  (bus push/pull)
+┌─────────────────┐            ┌──────────┴───────────────┐
+│    Client A     │            │  Runner — CLIENT MACHINE  │
+│   (remote UI)   │            │                           │
+└─────────────────┘            │  ┌──────────┐             │
+┌─────────────────┐            │  │  daemon  │             │
+│    Client B     │            │  │ (runner) │             │
+│   (remote UI)   │            │  │          │ ┌─────────┐ │
+└─────────────────┘            │  │          │▶│ Claude  │ │
+                               │  │          │ │(sandbox)│ │
+   Clients drive the agent     │  │          │◀│ stdin/  │ │
+   over HTTP+SSE; they never   │  └──────────┘ │ stdout  │ │
+   touch the runner directly.  │               └─────────┘ │
+                               │  source + creds stay here │
+                               └───────────────────────────┘
 ```
+
+The **daemon and the sandbox run on the client's machine (the runner)**, never on
+the server. `mework-server` is a **gateway + registry** only: it holds session
+metadata, the agent/definition catalog, and the message-bus topics, and routes
+between remote clients and the runner. It never spawns a sandbox or executes an
+agent, so source code and provider credentials stay on the runner.
 
 ## What this proves
 
@@ -65,7 +69,7 @@ The mework session system provides:
 | **Session** | A tracked conversation with lifecycle (create → attach → close) |
 | **Control channel** | Bus topic `session.<id>.control` — push messages to the agent |
 | **SSE stream** | Subscriber receives events from the session in real-time |
-| **Sandbox** | Claude Code runs as an isolated subprocess on the worker |
+| **Sandbox** | Claude Code runs as an isolated subprocess on the runner (the client's machine), never on the server |
 | **Conversation** | Multi-turn chat with history, streaming tokens, cancel |
 
 ### API Flow

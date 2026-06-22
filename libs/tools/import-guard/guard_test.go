@@ -65,6 +65,14 @@ func TestCheckImport_ModuleBoundaryGuard(t *testing.T) {
 			allowed:    false,
 		},
 		{
+			// c0027 execution-locality: the server is a gateway + registry; it
+			// must not depend on the sandbox engine, so it cannot spawn a sandbox.
+			name:       "server importing sandbox/engine/local is forbidden",
+			sourceMod:  "mework/server",
+			importPath: "mework/libs/sandbox/engine/local",
+			allowed:    false,
+		},
+		{
 			name:       "client importing server/hub is forbidden",
 			sourceMod:  "mework/client",
 			importPath: "mework/libs/server/hub",
