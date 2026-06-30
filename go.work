@@ -11,3 +11,5 @@ use (
 	./libs/tools
 	./libs/mcp-server
 )
+
+replace github.com/mezon/mezon-go-sdk-turbo => ../funix-mezon-bot/platform/packages/mezon-go-sdk-turbo

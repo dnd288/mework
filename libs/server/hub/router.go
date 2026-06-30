@@ -19,6 +19,7 @@ import (
 	"mework/libs/server/middleware"
 	"mework/libs/server/notify"
 	"mework/libs/server/orchestrator"
+	mezon_turbo "mework/libs/server/provider/mezon/turbo"
 	"mework/libs/server/registry"
 	"mework/libs/server/session"
 	"mework/libs/server/unitqueue"
@@ -44,9 +45,6 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
-	// Cap request bodies to bound memory use (e.g. webhook payloads read via
-	// io.ReadAll). SSE responses are unaffected — this limits the request body,
-	// not the long-lived response stream.
 	r.Use(chimiddleware.RequestSize(maxRequestBytes))
 
 	r.Get("/healthz", HealthHandler(pool))
@@ -69,8 +67,6 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	}
 
 	// Channel routing infrastructure.
-	// Experimental channel routing is opt-in (CHANNEL_ROUTING_ENABLED), off by
-	// default — a default deployment uses the legacy webhook pipeline.
 	channelFeature := channel.NewFeatureFlag(cfg.ChannelRoutingEnabled)
 	channelReg := channel.NewPostgresRegistry(pool)
 	if err := channelReg.PopulateCache(context.Background()); err != nil {
@@ -84,18 +80,12 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 	sessionMgr := session.NewManager(msgBroker, session.DefaultConfig())
 	sessionHandlers := session.NewHandlers(sessionMgr, agentHandlers, msgBroker)
 
-	// Unit queue registry: name → session routing so callers can send messages
-	// to agents by name instead of by opaque session ID.
 	unitQueueReg := unitqueue.NewMemoryRegistry()
 	unitQueueHandlers := unitqueue.NewHandlers(unitQueueReg, msgBroker)
 
 	autoProvisioner := channel.NewAutoProvisioner(registrySvc, channelReg, sessionMgr, agentHandlers, msgBroker, registry.DefaultTenantID)
 	channelRouter := channel.NewRouter(channelReg, msgBroker, autoProvisioner, channelFeature)
 
-	// The webhook handler is provider-agnostic: it delegates signature
-	// verification, event parsing, and task-detail fetching to whichever
-	// provider is registered (if any). When no provider is registered,
-	// the /webhooks/{provider} endpoint returns 404 (not configured).
 	webhookHandler := webhook.NewHandler(pool, msgBroker, cfg.MeworkSecretKey, channelRouter)
 
 	r.Post("/webhooks/{provider}", webhookHandler.ServeHTTP)
@@ -127,11 +117,13 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 
 	channelHandlers := channel.NewHandlers(pool)
 
+	// Mezon bot registry store — backs the CRUD API for the standalone worker.
+	// The turbo engine itself runs in the separate mework-mezon-worker process,
+	// which fetches bot credentials from this store via the API.
+	turboStore := mezon_turbo.NewStore(pool, cfg.MeworkSecretKey)
+	mezonBotHandlers := mezon_turbo.NewBotHandlers(turboStore)
+
 	r.Route("/api/v1", func(r chi.Router) {
-		// PAT-authenticated management routes (operator / human caller). Grouped
-		// (rather than r.Use on the mount) so the runtime-authed agent pull route
-		// below can live in the same /api/v1 mount without a separate
-		// /api/v1/agents sub-mount shadowing these PAT-authed agent routes.
 		r.Group(func(r chi.Router) {
 			r.Use(patAuth.Middleware)
 
@@ -157,36 +149,34 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 
 			r.Post("/runners/registration-tokens", registryHandlers.IssueRegistrationToken)
 
-			// Artifact endpoints: list artifacts for a run, download a single artifact.
 			r.Get("/runs/{runID}/artifacts", artifactHandlers.ListArtifacts)
 			r.Get("/runs/{runID}/artifacts/{name}", artifactHandlers.GetArtifact)
 
-			// Channel sessions endpoint: list active channel bindings.
 			r.Get("/channels", channelHandlers.ListChannels)
 
-			// Interactive session lifecycle (c0031): create dispatches an
-			// open-session message to the named runner; owner/tenant come from
-			// the authenticated PAT, never from request args.
 			r.Post("/sessions", sessionHandlers.CreateSession)
 			r.Get("/sessions", sessionHandlers.ListSessions)
 			r.Get("/sessions/{id}", sessionHandlers.GetSession)
 			r.Delete("/sessions/{id}", sessionHandlers.CloseSession)
 
-			// Session chat bus (c0032, PAT/human): submit a turn and stream events.
 			r.Post("/sessions/{id}/messages", sessionHandlers.SendMessage)
 			r.Get("/sessions/{id}/stream", sessionHandlers.StreamSession)
 
-			// Unit queue routes: register/deregister/list/send by agent name.
 			r.Post("/unitqueues/{name}/register", unitQueueHandlers.RegisterAgent)
 			r.Post("/unitqueues/{name}/deregister", unitQueueHandlers.DeregisterAgent)
 			r.Get("/unitqueues", unitQueueHandlers.ListAgents)
 			r.Get("/unitqueues/{name}", unitQueueHandlers.GetAgent)
 			r.Post("/unitqueues/{name}/messages", unitQueueHandlers.SendMessage)
+
+			// Mezon bot registry: bot CRUD for the standalone worker.
+			r.Post("/mezon/bots", mezonBotHandlers.RegisterBot)
+			r.Get("/mezon/bots", mezonBotHandlers.ListBots)
+			r.Get("/mezon/bots/{id}", mezonBotHandlers.GetBot)
+			r.Delete("/mezon/bots/{id}", mezonBotHandlers.DeregisterBot)
+			r.Patch("/mezon/bots/{id}/status", mezonBotHandlers.UpdateBotStatus)
 		})
 
-		// Runtime-authenticated agent pull (rt_ Bearer + grant). Same /api/v1
-		// mount, separate middleware group — coexists with the PAT-authed agent
-		// management routes above (distinct paths) with no shadowing.
+		// Runtime-authenticated agent pull (rt_ Bearer + grant).
 		r.Group(func(r chi.Router) {
 			r.Use(runtimeAuth.Middleware)
 			r.With(
@@ -198,17 +188,12 @@ func NewServer(pool *pgxpool.Pool, cfg *Config) *Server {
 
 	r.Post("/api/v1/runners/enroll", registryHandlers.EnrollRunner)
 
-	// Runner session endpoints (runtime-auth, rt_ Bearer): the daemon POSTs a
-	// terminal result here (c0031) and republishes outgoing ChatEvents (c0032)
-	// onto the session control topic for the hub to relay.
 	r.Route("/api/v1/runners/sessions", func(r chi.Router) {
 		r.Use(runtimeAuth.Middleware)
 		r.Post("/{id}/result", sessionHandlers.ResultSession)
 		r.Post("/{id}/events", sessionHandlers.ReceiveEvents)
 	})
 
-	// Daemon presence endpoints (runtime-auth, rt_ Bearer) — note: MUST use a
-	// separate prefix from /sessions to avoid chi's route parameter shadowing.
 	r.Route("/api/v1/runners/presence", func(r chi.Router) {
 		r.Use(runtimeAuth.Middleware)
 		r.Post("/{id}/online", registry.NewPresenceHandler(pool, "online"))
@@ -236,14 +221,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.Router.ServeHTTP(w, r)
 }
 
-// startNotifySweeper launches a background goroutine that retries pending
-// notification deliveries every 30 seconds. It stops when the context is
-// cancelled.
 func startNotifySweeper(ctx context.Context, notifier *notify.Notifier) {
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-
 		for {
 			select {
 			case <-ticker.C:

@@ -29,14 +29,22 @@ type DaemonConfig struct {
 	SandboxEngine string `json:"sandbox_engine,omitempty"`
 }
 
+// MezonCredentials holds the Mezon bot app credentials stored in config.
+type MezonCredentials struct {
+	AppID   string `json:"app_id,omitempty"`
+	APIKey  string `json:"api_key,omitempty"`
+	BaseURL string `json:"base_url,omitempty"`
+}
+
 // Config is the on-disk CLI/daemon configuration for a profile.
 type Config struct {
-	BaseURL      string       `json:"base_url,omitempty"`
-	WorkspaceID  string       `json:"workspace_id,omitempty"`
-	Token        string       `json:"token,omitempty"`
-	ServerURL    string       `json:"server_url,omitempty"`
-	RuntimeToken string       `json:"rt_token,omitempty"`
-	Daemon       DaemonConfig `json:"daemon,omitempty"`
+	BaseURL      string           `json:"base_url,omitempty"`
+	WorkspaceID  string           `json:"workspace_id,omitempty"`
+	Token        string           `json:"token,omitempty"`
+	ServerURL    string           `json:"server_url,omitempty"`
+	RuntimeToken string           `json:"rt_token,omitempty"`
+	Daemon       DaemonConfig     `json:"daemon,omitempty"`
+	Mezon        *MezonCredentials `json:"mezon,omitempty"`
 }
 
 // LoadConfig reads the profile config from disk. A missing file yields a

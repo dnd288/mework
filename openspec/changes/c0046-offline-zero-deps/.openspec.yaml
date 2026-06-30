@@ -1,0 +1,16 @@
+slug: c0046-offline-zero-deps
+title: Self-contained worker with miniredis fallback
+status: active
+artifacts:
+  proposal:
+    path: proposal.md
+    status: done
+    depends: []
+  design:
+    path: design.md
+    status: done
+    depends: [proposal]
+  tasks:
+    path: tasks.md
+    status: done
+    depends: [design]
