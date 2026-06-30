@@ -30,6 +30,18 @@ func (m *mockProvider) WriteBack(ctx context.Context, token string, taskID strin
 	return nil
 }
 
+func (m *mockProvider) WebhookHeaders() WebhookHeaderNames {
+	return WebhookHeaderNames{
+		Signature:  "X-Signature",
+		Timestamp:  "X-Timestamp",
+		DeliveryID: "X-Delivery",
+	}
+}
+
+func (m *mockProvider) FetchTaskDetail(_ context.Context, _, _ string) (*TaskDetail, error) {
+	return nil, nil
+}
+
 func (m *mockProvider) ChannelKey(rawPayload []byte) (string, string) {
 	return m.code, "mock-resource"
 }
@@ -44,6 +56,16 @@ func (m *melloKeyMock) ExtractContainerID([]byte) (string, error) { return "", n
 func (m *melloKeyMock) VerifyWebhook([]byte, string, string, string) error { return nil }
 func (m *melloKeyMock) ParseEvent([]byte) (*CanonicalEvent, error) { return nil, nil }
 func (m *melloKeyMock) WriteBack(context.Context, string, string, string) error { return nil }
+func (m *melloKeyMock) WebhookHeaders() WebhookHeaderNames {
+	return WebhookHeaderNames{
+		Signature:  "X-Signature",
+		Timestamp:  "X-Timestamp",
+		DeliveryID: "X-Delivery",
+	}
+}
+func (m *melloKeyMock) FetchTaskDetail(_ context.Context, _, _ string) (*TaskDetail, error) {
+	return nil, nil
+}
 func (m *melloKeyMock) ChannelKey(raw []byte) (string, string) {
 	var p struct {
 		Data struct {

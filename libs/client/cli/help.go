@@ -28,7 +28,7 @@ func registerCommands() {
 	profileCmd.GroupID = groupRuntime
 	rootCmd.AddCommand(providerCmd, runtimeCmd, profileCmd)
 
-	for _, c := range []*cobra.Command{workspaceCmd, boardCmd, ticketCmd, commentCmd, searchCmd} {
+	for _, c := range []*cobra.Command{workspaceCmd, boardCmd, ticketCmd, commentCmd, searchCmd, runCmd} {
 		c.GroupID = groupCore
 		rootCmd.AddCommand(c)
 	}

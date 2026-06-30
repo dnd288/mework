@@ -185,7 +185,7 @@ func TestWebhookHandler(t *testing.T) {
 
 	// Create broker spy and handler (no channel router)
 	spy := &spyBroker{}
-	handler := NewHandler(pool, spy, secretKey, mockMello.URL, nil)
+	handler := NewHandler(pool, spy, secretKey, nil)
 
 	// Router for dispatching path params
 	r := chi.NewRouter()
@@ -502,7 +502,7 @@ func TestWebhookHandler_ChannelRoutingPath(t *testing.T) {
 
 	// Pass the spy channel router as the 5th arg — it implements both
 	// channelRouter (Route) and featureChecker (IsEnabled).
-	handler := NewHandler(pool, spy, secretKey, mockMello.URL, channelSpy)
+	handler := NewHandler(pool, spy, secretKey, channelSpy)
 
 	r := chi.NewRouter()
 	r.Post("/webhooks/{provider}", handler.ServeHTTP)
@@ -649,7 +649,7 @@ func TestWebhookHandler_LegacyPathWithFeatureOff(t *testing.T) {
 	featureFlag := channel.NewFeatureFlag(false) // Feature flag OFF
 
 	// Construct handler with feature flag disabled (legacy path)
-	handler := NewHandler(pool, spy, secretKey, mockMello.URL, featureFlag)
+	handler := NewHandler(pool, spy, secretKey, featureFlag)
 
 	r := chi.NewRouter()
 	r.Post("/webhooks/{provider}", handler.ServeHTTP)

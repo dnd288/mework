@@ -77,7 +77,7 @@ func TestAckJob(t *testing.T) {
 		t.Fatalf("failed to claim job: %v", err)
 	}
 
-	ackHandlers := NewAckHandlers(pool, "secret", "http://localhost")
+	ackHandlers := NewAckHandlers(pool, "secret")
 
 	// Set up router with middleware setting runtime ID context
 	r := chi.NewRouter()

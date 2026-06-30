@@ -206,7 +206,7 @@ func TestExecuteWriteBack(t *testing.T) {
 	defer mockMello.Close()
 
 	// Execute writeback
-	err = ExecuteWriteBack(ctx, pool, secretKey, mockMello.URL, jobID)
+	err = ExecuteWriteBack(ctx, pool, secretKey, jobID)
 	if err != nil {
 		t.Fatalf("ExecuteWriteBack failed: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestWriteBackFromChannel_FullFlow(t *testing.T) {
 	defer cancel()
 
 	// ExecuteWriteBackFromChannel does not exist yet — RED compile failure.
-	err := ExecuteWriteBackFromChannel(ctx, nil, "test-key", "http://localhost:9999", "mello:TICKET-99", "job completed")
+	err := ExecuteWriteBackFromChannel(ctx, nil, "test-key", "mello:TICKET-99", "job completed")
 	if err != nil {
 		t.Fatalf("ExecuteWriteBackFromChannel failed: %v", err)
 	}

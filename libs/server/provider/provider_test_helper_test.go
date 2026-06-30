@@ -15,7 +15,17 @@ func (m *testMockProvider) ExtractContainerID([]byte) (string, error)       { re
 func (m *testMockProvider) VerifyWebhook([]byte, string, string, string) error { return nil }
 func (m *testMockProvider) ParseEvent([]byte) (*CanonicalEvent, error)      { return nil, nil }
 func (m *testMockProvider) WriteBack(context.Context, string, string, string) error { return nil }
-func (m *testMockProvider) ChannelKey([]byte) (string, string)              { return m.code, "mock-resource" }
+func (m *testMockProvider) WebhookHeaders() WebhookHeaderNames {
+	return WebhookHeaderNames{
+		Signature:  "X-Signature",
+		Timestamp:  "X-Timestamp",
+		DeliveryID: "X-Delivery",
+	}
+}
+func (m *testMockProvider) FetchTaskDetail(_ context.Context, _, _ string) (*TaskDetail, error) {
+	return nil, nil
+}
+func (m *testMockProvider) ChannelKey([]byte) (string, string) { return m.code, "mock-resource" }
 
 func init() {
 	// Register well-known provider codes so Get("mello") and Get("github")

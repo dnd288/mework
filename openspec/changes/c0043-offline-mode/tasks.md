@@ -7,30 +7,30 @@
 
 ## 2. CLI — daemon start --offline flag
 
-- [ ] 2.1 Add `--offline` and `--workspace` flags to `mework daemon start` command in `libs/client/cli/daemon.go`
-- [ ] 2.2 When `--offline` is set, skip hub enrollment/connection and use `workspace_start.StartWorkspaceSession` instead of the SSE dispatch loop
-- [ ] 2.3 Validate workspace directory exists and contains a valid `mework.yml` at startup
-- [ ] 2.4 Validate the `engine` field is `local` (reject docker/cloudflare in offline mode with a clear error)
-- [ ] 2.5 Start the offline IPC listener after the sandbox is ready
+- [x] 2.1 Add `--offline` and `--workspace` flags to `mework daemon start` command in `libs/client/cli/daemon.go`
+- [x] 2.2 When `--offline` is set, skip hub enrollment/connection and use `workspace_start.StartWorkspaceSession` instead of the SSE dispatch loop
+- [x] 2.3 Validate workspace directory exists and contains a valid `mework.yml` at startup
+- [x] 2.4 Validate the `engine` field is `local` (reject docker/cloudflare in offline mode with a clear error)
+- [x] 2.5 Start the offline IPC listener after the sandbox is ready
 
 ## 3. CLI — mework run command
 
-- [ ] 3.1 Create `libs/client/cli/cmd_run.go` — `mework run <instruction>` command that connects to the running offline agent's Unix socket, sends the instruction, and streams the response to stdout
-- [ ] 3.2 Use stdin (not argv) to pass the instruction to the sandbox, preserving the injection-safety invariant
-- [ ] 3.3 Handle agent-not-running case: error if socket doesn't exist
-- [ ] 3.4 Handle agent error case: propagate non-zero exit codes
-- [ ] 3.5 Write PID file to `~/.mework/offline.pid` for `mework stop` to find
+- [x] 3.1 Create `libs/client/cli/cmd_run.go` — `mework run <instruction>` command that connects to the running offline agent's Unix socket, sends the instruction, and streams the response to stdout
+- [x] 3.2 Use stdin (not argv) to pass the instruction to the sandbox, preserving the injection-safety invariant
+- [x] 3.3 Handle agent-not-running case: error if socket doesn't exist
+- [x] 3.4 Handle agent error case: propagate non-zero exit codes
+- [x] 3.5 Write PID file to `~/.mework/offline.pid` for `mework stop` to find
 
 ## 4. Wire into CLI registration
 
-- [ ] 4.1 Add `runCmd` to `registerCommands()` in `libs/client/cli/help.go`
-- [ ] 4.2 Ensure `mework daemon start --offline` and `mework daemon stop` cover the offline agent lifecycle
+- [x] 4.1 Add `runCmd` to `registerCommands()` in `libs/client/cli/help.go`
+- [x] 4.2 Ensure `mework daemon start --offline` and `mework daemon stop` cover the offline agent lifecycle
 
 ## 5. Tests
 
 - [ ] 5.1 Unit tests for offline IPC: start agent, send instruction, verify response
-- [ ] 5.2 Unit test: `mework start --offline` without `--workspace` prints error
-- [ ] 5.3 Unit test: `mework start --workspace <bad-dir> --offline` prints error
-- [ ] 5.4 Unit test: `mework run` with no running agent prints error
+- [x] 5.2 Unit test: `mework start --offline` without `--workspace` prints error
+- [x] 5.3 Unit test: `mework start --workspace <bad-dir> --offline` prints error
+- [x] 5.4 Unit test: `mework run` with no running agent prints error
 - [ ] 5.5 Unit test: offline agent resolves definition from workspace mework.yml
 - [ ] 5.6 Unit test: offline agent rejects non-local engine in mework.yml

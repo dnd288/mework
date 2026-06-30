@@ -139,7 +139,7 @@ func TestClaimJob(t *testing.T) {
 
 	// Test case 3: Heartbeat on claimed job
 	{
-		ackHandlers := NewAckHandlers(pool, "secret", "http://localhost")
+		ackHandlers := NewAckHandlers(pool, "secret")
 		r.Post("/api/v1/jobs/{id}/heartbeat", ackHandlers.Heartbeat)
 
 		req := httptest.NewRequest("POST", "/api/v1/jobs/"+claimedJobID+"/heartbeat", nil)

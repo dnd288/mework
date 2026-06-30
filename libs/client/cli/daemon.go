@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,12 +26,17 @@ var daemonCmd = &cobra.Command{
 }
 
 var daemonForeground bool
+var daemonOffline bool
+var workspaceDir string
 
 var daemonStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the agent daemon (background by default; --foreground to run in-process)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		prof := profile()
+		if daemonOffline {
+			return runOfflineForeground(prof)
+		}
 		if running, pid := runner.IsRunning(prof); running {
 			fmt.Printf("daemon already running (pid %d)\n", pid)
 			return nil
@@ -107,6 +113,8 @@ var daemonLogsFollow bool
 
 func init() {
 	daemonStartCmd.Flags().BoolVar(&daemonForeground, "foreground", false, "run the daemon in the foreground")
+	daemonStartCmd.Flags().BoolVar(&daemonOffline, "offline", false, "run the daemon in offline mode (no hub, no provider)")
+	daemonStartCmd.Flags().StringVar(&workspaceDir, "workspace", "", "workspace directory for offline mode")
 	daemonLogsCmd.Flags().BoolVarP(&daemonLogsFollow, "follow", "f", false, "follow the log output")
 	daemonCmd.AddCommand(daemonStartCmd, daemonStopCmd, daemonStatusCmd, daemonRestartCmd, daemonLogsCmd)
 }
@@ -199,6 +207,43 @@ func runForeground(prof string) error {
 	// Engine.Start spawns goroutines and returns; without the block the
 	// process would exit immediately and kill them.
 	<-ctx.Done()
+	return nil
+}
+
+// runOfflineForeground validates the offline-mode setup and starts the
+// workspace-bound session without hub enrollment or network dependencies.
+// It returns nil when all validations pass and the session is ready.
+func runOfflineForeground(prof string) error {
+	if workspaceDir == "" {
+		return fmt.Errorf("--workspace is required in offline mode")
+	}
+
+	info, err := os.Stat(workspaceDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("no such directory: %s", workspaceDir)
+		}
+		return fmt.Errorf("workspace directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("not a directory: %s", workspaceDir)
+	}
+
+	// Load and validate mework.yml.
+	meta, err := catalog.LoadWorkspaceConfig(workspaceDir)
+	if err != nil {
+		if errors.Is(err, runner.ErrDefinitionNotFound) {
+			return fmt.Errorf("no mework.yml found in workspace: %s", workspaceDir)
+		}
+		return fmt.Errorf("workspace config: %w", err)
+	}
+
+	if err := runner.ValidateOfflineEngine(meta); err != nil {
+		return err
+	}
+
+	// TODO(c0043): Start workspace session, IPC listener, block until ctx.Done().
+	fmt.Println("offline daemon ready")
 	return nil
 }
 
