@@ -8,7 +8,7 @@
 | Delta specs synced | yes |
 | Archived | openspec/changes/archive/2026-06-30-c0044-mezon-provider |
 | Tag | n/a |
-| Chore commit | 8230ea4 |
+| Chore commit | b4cc268 |
 | Skills applied | test-driven-development, incremental-implementation, code-simplification, debugging-and-error-recovery, code-review-and-quality, security-and-hardening, git-workflow-and-versioning, documentation-and-adrs |
 | Local review | pass (4 findings) |
 | Branch | feat/c0044-mezon-provider deleted |
