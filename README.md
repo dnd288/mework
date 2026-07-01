@@ -1,55 +1,19 @@
 # mework
 
-An **AI agent runtime** that runs in two modes:
-
-- **Server mode** — multi-tenant hub with Postgres + Redis, enrolled runners,
-  webhook pipelines, and provider integrations (Mello, Mezon).
-- **Offline mode** — single-user, zero external dependencies. A standalone
-  worker with embedded miniredis, an orchestrator agent with MCP tools, and
-  Mezon chat integration.
-
-Agents run **on your machine inside sandboxes** — source code and credentials
+A **cowork runtime** that connects providers (Mezon, GitHub, Mello) to
+AI agents (Claude Code) running on your machine. Source code and credentials
 never leave the device.
 
-## Quick comparison
-
-| | Server mode | Offline mode |
-|---|---|---|
-| **Database** | Postgres (required) | None (miniredis embedded) |
-| **Message broker** | Postgres LISTEN/NOTIFY or in-memory | In-memory (miniredis lists) |
-| **Multi-tenant** | Yes (accounts, tenants, PAT auth) | Single user |
-| **Provider integrations** | Webhooks (Mello), Mezon worker | Mezon bot (standalone) |
-| **State persistence** | Durable (Postgres) | Ephemeral (lost on restart) |
-| **Setup** | `docker compose up` + enroll runner | `mework init` + start worker |
-| **Best for** | Teams, production, multi-provider | Dev, testing, single user |
-
-## Architecture
-
-### Server mode
-
 ```
-Provider ─webhook→  mework-server (Agent Hub)
-                      ├── Postgres (jobs, sessions, runtimes)
-                      ├── Redis (turbo engine state, dedup)
-                      ├── Agent catalog + session manager
-                      └── SSE push → Runner → Sandbox → result
+Provider ──→ mework ──→ AI agent (Claude Code, ...)
+  (Mezon,           (orchestrator, session manager, MCP tools)
+   GitHub,
+   Mello)
 ```
 
-### Offline mode
-
-```
-Mezon ──→ mework-mezon-worker (turbo engine)
-             ├── miniredis (in-memory state)
-             ├── Orchestrator agent (Claude with MCP tools)
-             ├── .claude/skills/ (session-manager, communicator, planner)
-             └── .claude/commands/ (/sessions, /spawn, /status, /stop)
-```
-
-The offline worker is a single binary that:
-1. Connects to Mezon via WebSocket (turbo SDK, multi-bot)
-2. Receives messages and pushes them to an **inbox queue** (Redis list)
-3. An **orchestrator goroutine** pops the inbox, runs Claude with MCP tools
-4. Results go to an **outbox queue**, then sent back to Mezon via the WebSocket
+- **Chat with your agent** from Mezon or the CLI
+- **Orchestrator** manages sessions, spawns sandboxes, coordinates work
+- **Zero infrastructure** — single binary, no databases to install
 
 ## Install
 
@@ -69,46 +33,38 @@ git clone https://github.com/minhlucncc/mework.git
 cd mework && make build    # → bin/mework, bin/mework-server, bin/mework-mezon-worker, bin/mework-mcp
 ```
 
-Requires **Go 1.26**. Server mode also needs **PostgreSQL** (Docker:
-`make test-db`). Offline mode needs **only the binary** — no databases to install.
+Requires **Go 1.26**. For server mode, also need **PostgreSQL** (`make test-db`).
 
 ## Quick start: Offline with Mezon
 
-The fastest way to try mework — one binary, zero infrastructure.
+**Prerequisites:** [Claude Code](https://claude.ai) (`claude` in PATH)
 
 ```bash
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/minhlucncc/mework/main/install.sh | sh
-# Or build from source: git clone + make build
 
-# 2. Create a workspace with the orchestrator template
-mkdir ~/my-bot && cd ~/my-bot
+# 2. Scaffold an orchestrator workspace
+mkdir ~/my-cowork && cd ~/my-cowork
 mework init --agent orchestrator
 
-# 3. Configure your Mezon bot credentials
-#    Get app_id and api_key at https://mezon.ai/developers/dashboard
+# 3. Set your Mezon bot credentials
+#    Get app_id + api_key at https://mezon.ai/developers/dashboard
 mework provider mezon set --app-id YOUR_APP_ID --api-key YOUR_API_KEY
 
-# 4. Start the worker (miniredis embedded, no install needed)
+# 4. Start the worker (miniredis built-in, zero config)
 mework mezon-worker start
 
-# 5. Add the bot to a Mezon clan, then chat
-#    @your-bot hello
-#    @your-bot sessions
-#    @your-bot spawn explore this repo
+# 5. Chat from Mezon (@your-bot) or from the CLI
+mework agent send orchestrator "explore the workspace" --wait
+mework agent send orchestrator "spawn a sandbox to list this repo" --wait
 ```
 
-No Postgres, no Redis, no server. The worker has everything built-in.
-You can also test from the CLI:
+No databases. No server. One binary. The worker auto-initializes
+CLAUDE.md, MCP tools, skills, and slash commands in your workspace.
 
-```bash
-mework agent send orchestrator "explore the workspace"
-mework agent send orchestrator "list sessions" --wait
-```
+## Quick start: Server mode (multi-tenant)
 
-## Quick start: Server mode
-
-### Server mode (multi-tenant)
+Requires PostgreSQL and optionally Redis.
 
 ```bash
 # 1. Start Postgres and Redis
@@ -123,34 +79,11 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/mework \
   bin/mework-server
 
 # 3. Enroll a runner
-mework runner enroll --url http://localhost:8080 --token <registration-token>
+mework runner enroll --url http://localhost:8080 --token <token>
 mework daemon start
-
-# 4. Create an agent profile and start a sandbox
 mework profile create --name default --backend claude
 mework sandbox start -w .
 ```
-
-### Offline mode (single user, zero deps)
-
-```bash
-# 1. Initialize a workspace
-mework init --workspace . --agent orchestrator
-
-# 2. Start the Mezon bot worker with miniredis
-MEZON_CONFIG=./bots.json \
-  bin/mework-mezon-worker
-
-# 3. Chat with the orchestrator via Mezon (@your-bot)
-#    or via CLI
-mework agent send orchestrator "hello"
-```
-
-The offline worker auto-initializes the orchestrator workspace with:
-- `CLAUDE.md` — orchestrator persona, commands, session management
-- `.claude/settings.json` — MCP server config (mework-mcp tools)
-- `.claude/skills/` — session-manager, communicator, planner
-- `.claude/commands/` — `/sessions`, `/spawn`, `/status`, `/stop`
 
 ## CLI Commands
 
