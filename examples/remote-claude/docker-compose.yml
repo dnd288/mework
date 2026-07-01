@@ -1,0 +1,43 @@
+version: "3.9"
+
+# Brings up the mework hub (gateway + registry) and its Postgres.
+# The daemon, the sandbox, and Claude Code all run on YOUR machine, not here —
+# this compose is only the server tier. After `docker compose up -d`, point the
+# CLI at it:  export MEWORK_SERVER_URL=http://localhost:8080
+#
+# `mework server start` (the in-process CLI hub) is the local-terminal equivalent
+# of the mework-server service below; both serve the same hub on :8080.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mework
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mework-server:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.server
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/mework?sslmode=disable"
+      SERVER_KEY: "demo-server-key-change-in-production"
+      MEWORK_SECRET_KEY: "demo-secret-key-change-in-production"
+      LISTEN_ADDR: ":8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

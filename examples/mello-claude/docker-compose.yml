@@ -1,0 +1,37 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mework
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mework-server:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.server
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/mework?sslmode=disable"
+      SERVER_KEY: "demo-server-key-change-in-production"
+      MEWORK_SECRET_KEY: "demo-secret-key-change-in-production"
+      MELLO_BASE_URL: "https://mello.mezon.vn/api/v1"
+      WEBHOOK_SECRET: "${MELLO_WEBHOOK_SECRET:-demo-webhook-secret}"
+      LISTEN_ADDR: ":8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

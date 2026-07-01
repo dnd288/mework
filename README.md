@@ -1,97 +1,206 @@
 # mework
 
-A Go CLI and agent-runtime daemon for [Mello](https://mello.mezon.vn), the kanban tool, integrated with a central webhook-driven server.
+A **cowork runtime** that connects providers (Mezon, GitHub, Mello) to
+AI agents (Claude Code) running on your machine. Source code and credentials
+never leave the device.
 
-`mework` manages boards/tickets from the command line and runs a local **agent
-daemon** that polls the central `mework-server` for jobs. The server receives webhook
-notifications from providers (like Mello) when a trigger keyword (`/run`) is posted in a comment,
-and the local daemon executes the AI CLI (claude / codex / opencode) against the ticket context in
-an isolated workspace before returning the result.
+```
+Provider ──→ mework ──→ AI agent (Claude Code, ...)
+  (Mezon,           (orchestrator, session manager, MCP tools)
+   GitHub,
+   Mello)
+```
+
+- **Chat with your agent** from Mezon or the CLI
+- **Orchestrator** manages sessions, spawns sandboxes, coordinates work
+- **Zero infrastructure** — single binary, no databases to install
 
 ## Install
 
+### Quick install (macOS / Linux)
+
 ```bash
-make build        # produces ./bin/mework and ./bin/mework-server
-# or
-go install ./cmd/...
+curl -fsSL https://raw.githubusercontent.com/minhlucncc/mework/main/install.sh | sh
 ```
+
+Installs `mework`, `mework-server`, `mework-mezon-worker`, and `mework-mcp`
+to `/usr/local/bin` (or `~/.local/bin`).
 
 ## Quick start
 
+**Prerequisites:** [Claude Code](https://claude.ai) (`claude` in PATH)
+
+### Offline mode (single binary, no server)
+
+Run a local agent daemon — no databases, no infrastructure.
+
 ```bash
-# 1. Point the CLI to the central MeWork server.
-mework config set server_url http://localhost:8080
+# 1. Install
+curl -fsSL https://raw.githubusercontent.com/minhlucncc/mework/main/install.sh | sh
 
-# 2. Authenticate with your Mello personal access token.
-mework login --token mello_pat_xxx
-# (omit the value to be prompted, keeping the token out of shell history)
+# 2. Scaffold a workspace
+mkdir ~/my-cowork && cd ~/my-cowork
+mework init --workspace . --agent claude --name mybot
 
-# 3. Connect a third-party provider account (e.g., mello) to the server.
-mework provider connect --token mello_pat_xxx
-# (registers the provider credential on the server to enable write-backs)
+# 3. Start the offline daemon
+mework daemon start --offline --workspace .
 
-# 4. Register this local daemon runtime to get a runtime token (rt_token).
-mework runtime register --code local-macbook
-# (returns a token; configure the runtime token for your daemon as suggested:)
-mework config set rt_token mework_rt_xxx
-
-# 5. Create an AI instruction profile on the server.
-mework profile create --name default --body path/to/system_prompt.txt --backend claude --harness claude-code
-
-# 6. Start the agent daemon.
-mework daemon start          # background; --foreground to run in-process
-mework daemon status
-mework daemon logs -f
-
-# 7. Trigger an agent run: comment "/run <instructions>" on any ticket.
-#    The server receives the webhook, enqueues the job, the daemon claims & executes it, and the server writes back the result.
+# 4. Chat with your agent from the CLI
+mework agent send mybot "explore the workspace"
+mework agent send mybot "spawn a sandbox to list this repo"
 ```
 
-## Commands
+The workspace comes with CLAUDE.md, MCP tools, skills, and slash commands
+(`/sessions`, `/spawn`, `/status`, `/stop`) — everything the orchestrator agent
+needs to manage child sandboxes.
 
-| Group | Commands |
-|-------|----------|
-| Core | `workspace list`, `board list/get`, `ticket list/get/create/move`, `comment list/add`, `search` |
-| Runtime | `daemon start/stop/status/restart/logs`, `runtime register/list/revoke`, `profile create/list/update/delete` |
-| Additional | `login`, `auth status/logout`, `config show/set`, `provider connect`, `version` |
+### Mezon bot integration (server required)
 
-Most list/get commands accept `--json`. Global flags: `--server-url`,
-`--workspace-id`, `--profile`, `--debug`.
+Connect a Mezon chat bot so you can message your agent from any device.
 
-## How the trigger works
+```bash
+# 1. Have the server running (see "Server mode" below)
+# 2. Set your Mezon bot credentials
+#    Get app_id + api_key at https://mezon.ai/developers/dashboard
+mework provider mezon set --app-id YOUR_APP_ID --api-key YOUR_API_KEY
 
-The central `mework-server` receives webhook events from the connected provider (e.g., Mello).
-It scans incoming events/comments for the trigger keyword. A comment fires a job when:
+# 3. Register the bot on the server
+mework provider mezon bot register
 
-- its body contains the keyword (default `/run`, configurable), **and**
-- it was **not** authored by the daemon's own user (to prevent self-retrigger loops), **and**
-- it has not already been handled (tracked using unique constraints on `(provider_code, external_event_id)`).
+# 4. Start the Mezon worker
+mework mezon-worker start
 
-When a job is claimed, the daemon builds the prompt from the canonical job payload and feeds it to the AI CLI over **stdin** (never as a shell argument) inside an isolated workspace.
+# 5. Chat from Mezon (@your-bot)
+```
 
-## Configuration
+## Quick start: Server mode (multi-tenant)
 
-Config lives at `~/.mework/config.json` (use `--profile <name>` to isolate
-config, daemon state, pid, and logs under `~/.mework/profiles/<name>/`).
-Resolution precedence is **flag > environment > config file**.
+The server powers session management, sandbox orchestration, the job queue,
+and provider integrations (Mezon, GitHub, etc.).
 
-| Key / Env | Purpose |
-|-----------|---------|
-| `MELLO_API_KEY` / `token` | Bearer token for REST |
-| `MELLO_BASE_URL` / `base_url` | REST base (default `https://mello.mezon.vn/api/v1`) |
-| `server_url` / `MEWORK_SERVER_URL` | Mework central server endpoint (default `http://localhost:8080`) |
-| `rt_token` | Secure runtime registry token for daemon polling and execution |
-| `MELLO_WORKSPACE_ID` / `workspace_id` | Default workspace |
-| `daemon.trigger_keyword` | Trigger keyword (default `/run`) |
-| `daemon.done_column_id` | Optional column to move finished tickets to |
+```bash
+# 1. Start Postgres
+docker run -d --name mework-pg -p 5432:5432 postgres:16-alpine
 
-See [docs/cli-and-daemon-guide.md](docs/cli-and-daemon-guide.md) for details.
+# 2. Start the server
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/mework \
+  SERVER_KEY=your-key-min-16-chars \
+  MEWORK_SECRET_KEY=your-key-min-16-chars \
+  bin/mework-server
+
+# 3. Enroll a runner and start the daemon
+mework runner enroll --url http://localhost:8080
+mework daemon start
+
+# 4. Configure an AI profile
+mework profile create --name default --backend claude
+
+# 5. Turn your workspace into a sandbox session
+mework sandbox start -w .
+```
+
+> **Note:** Commands that talk to the server (`sandbox`, `session`, `profile`,
+> `provider`) are authenticated via a Personal Access Token (PAT). Set
+> `MEWORK_API_KEY` or run `mework login` after enrolling a runner.
+
+## CLI Commands
+
+```                   
+Core:     workspace, board, ticket, comment, search
+Runtime:  daemon, agent, profile, runner, runtime, sandbox, session, server
+Worker:   mezon-worker (start/stop/status/logs)
+Setup:    init, login, provider, config, auth
+```
+
+| Command | Purpose |
+|---------|---------|
+| `mework init --workspace . --agent claude --name mybot` | Scaffold a workspace with CLAUDE.md + MCP + skills |
+| `mework daemon start --offline --workspace .` | Start the offline agent daemon (no server needed) |
+| `mework mezon-worker start` | Start the standalone Mezon bot worker |
+| `mework agent send <name> <msg>` | Send a message to a local or hub agent |
+| `mework provider mezon set --app-id ... --api-key ...` | Store Mezon bot credentials locally |
+| `mework provider mezon bot register` | Register a Mezon bot on the server |
+| `mework session create/attach/send` | Interactive session lifecycle |
+| `mework sandbox start -w .` | Turn a workspace into a runnable sandbox |
+
+Full reference: **[docs/cli-and-usage.md](docs/cli-and-usage.md)**.
+
+## HTTP API
+
+| Auth | Routes |
+|------|--------|
+| **Open** | `GET /healthz` · `GET /livez` · `GET /readyz` · `POST /webhooks/{provider}` |
+| **Runtime (`rt_`)** | `/api/v1/jobs/*` · `/api/v1/runners/sessions/*` · `/api/v1/agents/*/pull` |
+| **PAT** | `/api/v1/{runtimes,connections,profiles,agents,sessions,channels,mezon/bots}` |
+
+Details: **[docs/api-reference.md](docs/api-reference.md)**.
+
+## Orchestrator agent
+
+The orchestrator is a Claude Code agent with:
+
+- **MCP tools**: `spawn_sandbox`, `list_child_sandboxes`, `get_sandbox_status`,
+  `destroy_sandbox`, `notify_human`, `ask_human`, `get_session_context`, `write_artifact`
+- **Skills**: session management, task planning, Mezon communication
+- **Commands**: `/sessions`, `/spawn <task>`, `/status <id>`, `/stop <id>`
+
+The orchestrator manages work by spawning child sandboxes — each sandbox is an
+independent Claude Code agent working on a specific task. The user chats with the
+orchestrator to coordinate everything.
+
+## Templates
+
+```
+templates/workspace/
+├── orchestrator/     ← orchestrator agent (chat, session mgmt)
+└── worker/           ← worker agent (spawned by orchestrator)
+```
+
+`mework init` copies both templates into your workspace as
+`.mework/orchestrator/` and `.mework/worker/`. Each includes
+`mework.yml`, `CLAUDE.md`, `.claude/settings.json`, `.claude/skills/`,
+and `.claude/commands/`.
+
+## Spec-driven development
+
+All non-trivial changes start as specs using OpenSpec:
+
+```
+/opsx:explore → /opsx:propose → /opsx:spec → /opsx:apply → /opsx:ship → /opsx:archive
+```
+
+Shipped changes live in `openspec/changes/archive/`. Details:
+[docs/openspec-workflow.md](docs/openspec-workflow.md).
 
 ## Development
 
+### From source
+
+Requires **Go 1.26**. For server mode, also need **PostgreSQL** (`make test-db`).
+
 ```bash
-make test     # go test ./...
-make vet      # go vet ./...
-make build    # build with version ldflags
-make snapshot # goreleaser cross-compile (requires goreleaser)
+git clone https://github.com/minhlucncc/mework.git
+cd mework && make build    # → bin/mework, bin/mework-server, bin/mework-mezon-worker, bin/mework-mcp
 ```
+
+### Commands
+
+```bash
+make build    # all binaries
+make vet      # go vet
+make test     # go test -p 1 (DB tests need TEST_DATABASE_URL)
+make test-db  # Docker Postgres
+```
+
+## Docs
+
+- [docs/product-overview.md](docs/product-overview.md)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/api-reference.md](docs/api-reference.md)
+- [docs/cli-and-usage.md](docs/cli-and-usage.md)
+- [docs/deployment-guide.md](docs/deployment-guide.md)
+- [docs/auth-and-secrets.md](docs/auth-and-secrets.md)
+- [docs/runtime-and-sandbox.md](docs/runtime-and-sandbox.md)
+- [docs/openspec-workflow.md](docs/openspec-workflow.md)
+- [docs/engineering-skills.md](docs/engineering-skills.md)
+- [examples/remote-claude/](examples/remote-claude/)

@@ -1,0 +1,5 @@
+name: local-claude
+version: 1.0.0
+engine: local
+backend: claude
+author: mework

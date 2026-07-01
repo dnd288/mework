@@ -1,0 +1,15 @@
+mework/libs/server/catalog/dispatch.go:48:		DispatchToRunner			100.0%
+mework/libs/server/catalog/dispatch.go:54:		DispatchToRunnerWithChannel		100.0%
+mework/libs/server/catalog/dispatch.go:59:		dispatch				76.2%
+mework/libs/server/catalog/dispatch.go:106:		DispatchSessionToRunner			72.2%
+mework/libs/server/catalog/dispatch.go:146:		DispatchVersionToRunner			100.0%
+mework/libs/server/catalog/dispatch.go:151:		DispatchVersionToRunnerWithChannel	0.0%
+mework/libs/server/session/handlers.go:30:		NewHandlers				100.0%
+mework/libs/server/session/handlers.go:43:		CreateSession				64.0%
+mework/libs/server/session/handlers.go:103:		ResultSession				60.0%
+mework/libs/server/session/handlers.go:121:		GetSession				55.6%
+mework/libs/server/session/handlers.go:138:		ListSessions				75.0%
+mework/libs/server/session/handlers.go:154:		AttachSession				0.0%
+mework/libs/server/session/handlers.go:176:		CloseSession				50.0%
+mework/libs/server/session/handlers.go:193:		writeJSON				100.0%
+total:							(statements)				55.9%

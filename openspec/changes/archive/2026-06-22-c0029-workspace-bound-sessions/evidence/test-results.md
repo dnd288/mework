@@ -1,0 +1,19 @@
+# Test results — c0029-workspace-bound-sessions
+
+`go test -p 1 ./...` — exit 0, all green across all 7 modules
+(root + libs/{shared,server,client,sandbox,tests,tools}).
+
+DB-backed tests skip when `TEST_DATABASE_URL` is unset (start Postgres with
+`make test-db` and export the DSN to run them).
+
+```
+$ go test -p 1 ./... 2>&1 | tail -40
+ok  	mework/...	[all packages]
+ok  	mework/libs/shared/...
+ok  	mework/libs/server/...
+ok  	mework/libs/client/...
+ok  	mework/libs/sandbox/...
+ok  	mework/libs/tests/...
+ok  	mework/libs/tools/...
+PASS — all green; DB-backed tests SKIP without TEST_DATABASE_URL
+```

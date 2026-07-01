@@ -1,0 +1,15 @@
+mework/apps/mework-mezon-worker/config.go:25:		Load		75.0%
+mework/apps/mework-mezon-worker/main.go:17:		main		0.0%
+mework/apps/mework-mezon-worker/worker.go:45:		New		85.7%
+mework/apps/mework-mezon-worker/worker.go:73:		Run		100.0%
+mework/apps/mework-mezon-worker/worker.go:97:		InboundLoop	72.7%
+mework/apps/mework-mezon-worker/worker.go:125:		OutboundLoop	100.0%
+mework/apps/mework-mezon-worker/worker.go:141:		pollAndProcess	90.0%
+mework/apps/mework-mezon-worker/worker.go:167:		pollDoneJobs	87.5%
+mework/apps/mework-mezon-worker/worker.go:199:		enqueueJob	81.8%
+mework/apps/mework-mezon-worker/worker.go:241:		Load		87.5%
+mework/apps/mework-mezon-worker/worker.go:255:		Save		100.0%
+mework/apps/mework-server/main.go:22:			main		0.0%
+mework/apps/mework/main.go:24:				main		0.0%
+mework/apps/mework/main.go:36:				runHub		0.0%
+total:							(statements)	48.5%

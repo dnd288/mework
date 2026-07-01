@@ -1,0 +1,19 @@
+$ go tool cover -func=/tmp/shipcode-c0046-offline-zero-deps.cover 2>/dev/null | tail -20
+mework/apps/mework-mezon-worker/config.go:33:	Load			47.1%
+mework/apps/mework-mezon-worker/config.go:81:	env			66.7%
+mework/apps/mework-mezon-worker/config.go:88:	durationEnv		40.0%
+mework/apps/mework-mezon-worker/main.go:26:	main			0.0%
+mework/apps/mework-mezon-worker/main.go:170:	connectRedis		72.2%
+mework/apps/mework-mezon-worker/main.go:199:	intEnv			0.0%
+mework/apps/mework-mezon-worker/main.go:209:	truncate		0.0%
+mework/apps/mework-mezon-worker/worker.go:36:	NewOutboundPoller	0.0%
+mework/apps/mework-mezon-worker/worker.go:47:	EnqueueJob		0.0%
+mework/apps/mework-mezon-worker/worker.go:89:	pollAndProcess		0.0%
+mework/apps/mework-mezon-worker/worker.go:114:	pollDoneJobs		0.0%
+mework/apps/mework-mezon-worker/worker.go:143:	cursorPath		0.0%
+mework/apps/mework-mezon-worker/worker.go:147:	loadCursor		0.0%
+mework/apps/mework-mezon-worker/worker.go:155:	saveCursor		0.0%
+mework/apps/mework-server/main.go:22:		main			0.0%
+mework/apps/mework/main.go:24:			main			0.0%
+mework/apps/mework/main.go:36:			runHub			0.0%
+total:						(statements)		10.3%

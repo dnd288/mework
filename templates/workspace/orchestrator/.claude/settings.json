@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "mework-mcp": {
+      "command": "__MCP_BIN_PATH__"
+    }
+  }
+}

@@ -1,98 +1,82 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
+!.env.example
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-dist/
-bin/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# package manager
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-
-# semantic-release
-.nyc_output
-
-# env files (can opt-in for committing if needed)
-.env*
-!.env.example
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# flutter
-.dart_tool
-build
-GoogleService-Info.plist
-
-repomix-output.xml
-.serena/cache
-plans/**/*
 !plans/templates/*
-screenshots/*
-docs/screenshots/*
-logs.txt
-test-ck
-__pycache__
-
 # CK meta commands
-prompt.md
-ck.md
-
-# Generated runtime layout for release/install smoke tests
-/.claude/
-# But track repo-level rules that Claude Code reads
-!/.claude/rules/
-
+# External repos for study/reference
+# Gemini CLI settings (symlink to staged .claude/.mcp.json)
+# Git worktrees (local development only)
 # Local-only state inside tracked claude source
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Showoff/marketing assets (images, showcases)
+# debug
+# dependencies
+# env files (can opt-in for committing if needed)
+# flutter
+# lives in openspec/changes/<name>/ + git history). See docs/openspec-workflow.md.
+# misc
+# next.js
+# package manager
+# production
+# semantic-release
+# ship-all durable progress (re-discovered on each run from openspec list --json)
+# ship-plan / ship-code execution scaffolding (local-only; the durable record
+# testing
+# typescript
+# vercel
+*.pem
+*.tsbuildinfo
+.DS_Store
+.dart_tool
+.env*
+.gemini/settings.json
+.handoff/
+.nyc_output
+.pnp.*
+.pnpm-debug.log*
+.serena/cache
+.vercel
+.yarn/*
+/.next/
+/.pnp
+/build
+/coverage
+/mcp-server
+/mework-mcp
+/node_modules
+/out/
+GoogleService-Info.plist
+__pycache__
+assets/
+bin/
+build
+ck.md
 claude/agent-memory/
 claude/hooks/.logs/
-claude/session-state/latest.md
 claude/session-state/archive/
+claude/session-state/latest.md
 claude/settings.bak.json
 claude/skills/ai-multimodal/assets/demo-*.claude/session-state/*.tmp
-
-# Gemini CLI settings (symlink to staged .claude/.mcp.json)
-.gemini/settings.json
-# Showoff/marketing assets (images, showcases)
-assets/
-# Exception: use-mcp ships a persistent tool catalog at assets/tools.json
-!claude/skills/use-mcp/assets/
-!claude/skills/use-mcp/assets/**
-
-# External repos for study/reference
+dist/
+docs/screenshots/*
 external/
-
-# Git worktrees (local development only)
+go.work.sum
+logs.txt
+mework-mezon-worker
+next-env.d.ts
+npm-debug.log*
+openspec/changes/.ship-all-progress.json
+package-lock.json
+plans/**/*
+pnpm-lock.yaml
+prompt.md
+repomix-output.xml
+screenshots/*
+test-ck
 worktrees/
+yarn-debug.log*
+yarn-error.log*
+yarn.lock

@@ -1,0 +1,10 @@
+Command: go tool cover -func=/tmp/shipcode-c0026-prebuilt-agent-sandbox.cover 2>/dev/null | tail -20
+
+mework/apps/mework-server/main.go:22:	main		0.0%
+mework/apps/mework/main.go:6:		main		0.0%
+total:					(statements)	0.0%
+
+Note: this single-module cover file reports 0.0% because root `go test ./...`
+only covers the apps root module in this multi-module Go workspace. The
+meaningful full-tree figure is 20.4% total, from the merged coverage profile
+across all 7 modules (see gates.md).

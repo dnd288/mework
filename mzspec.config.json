@@ -1,0 +1,78 @@
+{
+  "$schema": "https://raw.githubusercontent.com/minhlucncc/mzspec/main/mzspec.config.schema.json",
+  "mzspecVersion": "0.12.0",
+  "openspec": {
+    "changesDir": "openspec/changes",
+    "specsDir": "openspec/specs",
+    "archivePattern": "YYYY-MM-DD-{change}",
+    "evidenceDir": "openspec/changes/{change}/evidence"
+  },
+  "git": {
+    "base": "main",
+    "branchPrefix": "feat/",
+    "specBranchPrefix": "spec/",
+    "changelog": "CHANGELOG.md"
+  },
+  "handoffDir": ".handoff/{change}",
+  "toolchains": {
+    "go": {
+      "dirs": [
+        "apps/mework",
+        "apps/mework-server",
+        "apps/mework-mezon-worker",
+        "libs/client",
+        "libs/server",
+        "libs/shared",
+        "libs/sandbox",
+        "libs/tests",
+        "libs/tools",
+        "libs/mcp-server"
+      ],
+      "gates": []
+    }
+  },
+  "bench": {
+    "prefix": "benchmarks/",
+    "dir": "benchmarks",
+    "alsoWhenToolchains": [],
+    "gates": []
+  },
+  "metaPrefixes": ["openspec/", "docs/", ".claude/", ".github/"],
+  "always": [
+    { "name": "openspec-validate", "cmd": "openspec validate \"<change>\" --strict" }
+  ],
+  "migration": {
+    "pattern": "(^|/)migrations/|goose",
+    "gate": null
+  },
+  "gatesDir": "gates",
+  "templatesDir": "openspec/templates",
+  "customGates": [],
+  "invariants": [
+    "Prompts go to AI CLIs over stdin, never argv (libs/sandbox/engine/local/runner.go).",
+    "Job state machine is transactional with row locks; terminal states are immutable (libs/server/orchestrator/state.go).",
+    "Webhook de-dup relies on UNIQUE(provider_code, external_event_id).",
+    "One active job per runtime (partial unique index); claims use FOR UPDATE SKIP LOCKED.",
+    "Self-retrigger guard: never enqueue a job for a comment authored by the daemon's own provider user.",
+    "Provider-agnostic schema: external entities identified by (provider_code, external_*_id).",
+    "Credentials: sealed with AES-256-GCM at rest; unsealed only server-side at write-back.",
+    "File perms: 0600 for credential/config files; 0700 for dirs.",
+    "Write-back is REST, not MCP.",
+    "Tests run with -p 1 (serialized) — DB-backed tests share one Postgres database."
+  ],
+  "tags": {
+    "categories": {
+      "cli":        { "paths": ["apps/mework/", "libs/client/cli/"] },
+      "backend":    { "paths": ["libs/server/", "libs/sandbox/", "libs/shared/", "libs/tools/", "libs/mcp-server/"] },
+      "api":        { "paths": ["libs/server/hub/", "libs/server/webhook/"] },
+      "db":         { "paths": ["libs/server/platform/store/", "migrations/"] },
+      "auth":       { "paths": ["libs/server/auth/", "libs/server/middleware/"] },
+      "security":   { "paths": ["libs/server/auth/", "libs/server/platform/secret/", "libs/server/platform/token/", "libs/server/webhook/"] },
+      "config":     { "paths": ["libs/shared/config/"] },
+      "docs":       { "paths": ["docs/"] },
+      "infra":      { "paths": [".github/", "Makefile", "Dockerfile", "scripts/"] },
+      "test":       { "paths": ["libs/tests/"] },
+      "migration":  { "paths": ["migrations/"] }
+    }
+  }
+}

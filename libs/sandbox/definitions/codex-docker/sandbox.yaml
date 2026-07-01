@@ -1,0 +1,6 @@
+name: codex-docker
+version: 1.0.0
+engine: docker
+backend: codex
+image: mework/codex:1.0.0
+author: mework

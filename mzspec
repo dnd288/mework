@@ -1,0 +1,565 @@
+#!/usr/bin/env bash
+# mzspec — unified CLI for the spec-driven delivery pipeline
+#
+# Usage:
+#   ./mzspec install [--ref <tag>] [--force]         Install mzspec into this project
+#   ./mzspec update [--ref <tag>] [--force-skills]    Update existing install
+#   ./mzspec ext add <name> [--force]                 Install an extension
+#   ./mzspec ext remove <name>                        Uninstall an extension
+#   ./mzspec ext list [--available|--installed]       List extensions
+#   ./mzspec ext info <name>                          Show extension metadata
+#   ./mzspec spec init|new|validate|status|list|archive|instructions ...
+#   ./mzspec gate-resolver [--stdin] [--json] [files...]
+#   ./mzspec discover
+#   ./mzspec template list|show|path|create|remove ...
+#   ./mzspec hooks list [--all]
+#   ./mzspec version
+#   ./mzspec help
+set -euo pipefail
+
+# ---- path resolution -----------------------------------------------------------
+# Resolve MZSPEC_DIR (repo root) and LIBS_DIR (where .js CLIs live).
+# Supports three modes:
+#   1. Repo mode:   scripts/ is a child of the repo root → lib/ is sibling of scripts/
+#   2. Vendored mode (project root): mzspec is at <project>/mzspec → .claude/workflows/lib/
+#   3. Vendored mode (subdir):       mzspec is at <project>/tools/mzspec → ../.claude/workflows/lib/
+
+SELF="$(cd "$(dirname "$0")" && pwd)"
+MZSPEC_DIR=""
+LIBS_DIR=""
+EXT_LIBS_DIR=""
+
+# Check repo mode: SELF/../lib/openspec.js exists
+if [ -f "$SELF/../lib/openspec.js" ]; then
+  MZSPEC_DIR="$(cd "$SELF/.." && pwd)"
+  LIBS_DIR="$MZSPEC_DIR/lib"
+  EXT_LIBS_DIR="$MZSPEC_DIR/extensions"
+# Check vendored mode: SELF/.claude/workflows/lib/openspec.js exists
+elif [ -f "$SELF/.claude/workflows/lib/openspec.js" ]; then
+  MZSPEC_DIR="$SELF"
+  LIBS_DIR="$SELF/.claude/workflows/lib"
+  EXT_LIBS_DIR=""
+# Check vendored subdir mode: SELF/../.claude/workflows/lib/openspec.js exists
+elif [ -f "$SELF/../.claude/workflows/lib/openspec.js" ]; then
+  MZSPEC_DIR="$(cd "$SELF/.." && pwd)"
+  LIBS_DIR="$MZSPEC_DIR/.claude/workflows/lib"
+  EXT_LIBS_DIR=""
+else
+  # Last resort: walk up looking for .claude/workflows/lib/openspec.js
+  DIR="$SELF"
+  while [ "$DIR" != "/" ]; do
+    if [ -f "$DIR/.claude/workflows/lib/openspec.js" ]; then
+      MZSPEC_DIR="$DIR"
+      LIBS_DIR="$DIR/.claude/workflows/lib"
+      break
+    fi
+    DIR="$(dirname "$DIR")"
+  done
+fi
+
+REPO_MODE=0
+if [ -n "$MZSPEC_DIR" ] && [ -f "$MZSPEC_DIR/scripts/install.sh" ]; then
+  REPO_MODE=1
+fi
+
+# ---- helpers ---------------------------------------------------------------
+log()  { printf '\033[1;35mmzspec\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33mmzspec\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31mmzspec\033[0m %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+Usage: ./mzspec <command> [args...]
+
+Commands:
+  install    Install mzspec into this project
+  update     Update an existing install
+  ext add    Install an extension (e.g. agent-skills, task-github)
+  ext remove Uninstall an extension
+  ext list   List available or installed extensions
+  ext info   Show extension metadata
+  spec       OpenSpec change management (init, new, validate, status, list, archive)
+  gate-resolver  Resolve quality gates for changed files
+  discover   Auto-discover toolchains from project manifests
+  template   Manage planning templates (list, show, path, create, remove)
+  hooks list List hooks in openspec/hooks/
+  docs       Show the SDD workflow overview (pipeline + extensions + hooks)
+  version    Show mzspec version
+  help       Show this help
+
+Run './mzspec <command> --help' for command-specific help.
+EOF
+  exit 0
+}
+
+version() {
+  if [ -n "$MZSPEC_DIR" ] && [ -f "$MZSPEC_DIR/VERSION" ]; then
+    cat "$MZSPEC_DIR/VERSION"
+  elif [ -f "$SELF/VERSION" ]; then
+    cat "$SELF/VERSION"
+  else
+    echo "unknown"
+  fi
+}
+
+# ---- extension management ---------------------------------------------------
+EXTENSIONS_DIR=""
+if [ -n "$MZSPEC_DIR" ] && [ -d "$MZSPEC_DIR/extensions" ]; then
+  EXTENSIONS_DIR="$MZSPEC_DIR/extensions"
+fi
+
+DEST="$(pwd)"
+
+ext_list_available() {
+  echo "Available extensions:"
+  if [ -z "$EXTENSIONS_DIR" ] || [ ! -d "$EXTENSIONS_DIR" ]; then
+    echo "  (no extensions directory found — run from a mzspec checkout)"
+    return
+  fi
+  for ext_dir in "$EXTENSIONS_DIR"/*/; do
+    [ -d "$ext_dir" ] || continue
+    name="$(basename "$ext_dir")"
+    if [ -x "$ext_dir/install.sh" ]; then
+      echo "  $name"
+    fi
+  done
+}
+
+ext_list_installed() {
+  echo "Installed extensions:"
+  if [ -z "$LIBS_DIR" ] || [ ! -d "$LIBS_DIR" ]; then
+    echo "  (no lib directory found)"
+    return
+  fi
+  # Detect by looking for extension-specific markers
+  [ -f "$LIBS_DIR/github.js" ]   && echo "  task-github    (github.js, lifecycle.js, github-link.js)"
+  # Skills detection
+  if [ -n "$MZSPEC_DIR" ] && [ -d "$MZSPEC_DIR/.claude/skills/code-simplification" ]; then
+    echo "  agent-skills   (.claude/skills/ extension skills present)"
+  fi
+}
+
+ext_cmd_add() {
+  local ext="$1"; shift
+  if [ -z "$EXTENSIONS_DIR" ]; then
+    die "cannot install extensions outside a mzspec checkout (no extensions/ directory found)"
+  fi
+  local ext_dir="$EXTENSIONS_DIR/$ext"
+  if [ ! -d "$ext_dir" ]; then
+    echo "error: extension '$ext' not found at $ext_dir"
+    echo "available:"; ext_list_available
+    exit 1
+  fi
+  if [ ! -x "$ext_dir/install.sh" ]; then
+    echo "error: $ext has no install.sh"
+    exit 1
+  fi
+  log "installing $ext ..."
+  bash "$ext_dir/install.sh" --dest "$DEST" "$@"
+  log "$ext installed"
+}
+
+ext_cmd_remove() {
+  local ext="$1"; shift
+  if [ -z "$EXTENSIONS_DIR" ]; then
+    die "cannot uninstall extensions outside a mzspec checkout"
+  fi
+  local ext_dir="$EXTENSIONS_DIR/$ext"
+  if [ ! -d "$ext_dir" ]; then
+    echo "error: extension '$ext' not found"
+    exit 1
+  fi
+  if [ ! -x "$ext_dir/uninstall.sh" ]; then
+    echo "error: $ext has no uninstall.sh"
+    exit 1
+  fi
+  log "uninstalling $ext ..."
+  bash "$ext_dir/uninstall.sh" --dest "$DEST" "$@"
+  log "$ext uninstalled"
+}
+
+ext_cmd_info() {
+  local ext="$1"
+  local ext_dir="$EXTENSIONS_DIR/$ext"
+  if [ ! -d "$ext_dir" ]; then
+    echo "error: extension '$ext' not found"
+    exit 1
+  fi
+  echo "Extension: $ext"
+  echo "Path: $ext_dir"
+  [ -x "$ext_dir/install.sh" ] && echo "install.sh: yes" || echo "install.sh: no"
+  [ -x "$ext_dir/uninstall.sh" ] && echo "uninstall.sh: yes" || echo "uninstall.sh: no"
+  [ -d "$ext_dir/skills" ] && echo "Has skills/: yes" || echo "Has skills/: no"
+  [ -d "$ext_dir/hooks" ] && echo "Has hooks/: yes" || echo "Has hooks/: no"
+  [ -d "$ext_dir/templates" ] && echo "Has templates/: yes" || echo "Has templates/: no"
+}
+
+# ---- hooks list -------------------------------------------------------------
+hooks_list() {
+  local show_all=0
+  [ "${1:-}" = "--all" ] && show_all=1
+
+  local hooks_root=""
+  if [ -n "$MZSPEC_DIR" ] && [ -d "$MZSPEC_DIR/openspec/hooks" ]; then
+    hooks_root="$MZSPEC_DIR/openspec/hooks"
+  elif [ -d "openspec/hooks" ]; then
+    hooks_root="$(cd openspec/hooks && pwd)"
+  fi
+
+  # Collect from main hooks dir
+  local agent_hooks=()
+  local prompt_hooks=()
+  if [ -n "$hooks_root" ]; then
+    while IFS= read -r f; do
+      name="$(basename "$f")"
+      if [[ "$name" == *.agent.md ]]; then
+        agent_hooks+=("$f")
+      elif [[ "$name" == *.prompt.md ]]; then
+        prompt_hooks+=("$f")
+      fi
+    done < <(find "$hooks_root" -maxdepth 1 -type f -name '*.agent.md' -o -name '*.prompt.md' 2>/dev/null | sort)
+  fi
+
+  # Also check extensions hooks (only in repo mode or --all)
+  local ext_hooks=()
+  if [ "$show_all" -eq 1 ] && [ -n "$EXTENSIONS_DIR" ] && [ -d "$EXTENSIONS_DIR" ]; then
+    while IFS= read -r f; do
+      ext_hooks+=("$f")
+    done < <(find "$EXTENSIONS_DIR" -path '*/hooks/on-*.prompt.md' -type f 2>/dev/null | sort)
+  fi
+
+  local total=$(( ${#agent_hooks[@]} + ${#prompt_hooks[@]} + ${#ext_hooks[@]} ))
+  if [ "$total" -eq 0 ]; then
+    echo "No hooks found."
+    [ -n "$hooks_root" ] && echo "  (check $hooks_root for .agent.md / .prompt.md files)"
+    return
+  fi
+
+  echo "Hooks ($total found):"
+  if [ "${#agent_hooks[@]}" -gt 0 ]; then
+    echo ""
+    echo "  Agent hooks (on-<event>.agent.md):"
+    for f in "${agent_hooks[@]}"; do
+      name="$(basename "$f")"
+      event="${name#on-}"; event="${event%.agent.md}"
+      echo "    $event"
+    done
+  fi
+  if [ "${#prompt_hooks[@]}" -gt 0 ]; then
+    echo ""
+    echo "  Prompt hooks (on-<event>.prompt.md):"
+    for f in "${prompt_hooks[@]}"; do
+      name="$(basename "$f")"
+      event="${name#on-}"; event="${event%.prompt.md}"
+      echo "    $event"
+    done
+  fi
+  if [ "${#ext_hooks[@]}" -gt 0 ]; then
+    echo ""
+    echo "  Extension hooks (extensions/*/hooks/):"
+    for f in "${ext_hooks[@]}"; do
+      name="$(basename "$f")"
+      rel="${f#$EXTENSIONS_DIR/}"
+      echo "    $rel"
+    done
+  fi
+}
+
+# ---- node dispatch -----------------------------------------------------------
+# Finds a node module and exec's it with all remaining args.
+node_dispatch() {
+  local module="$1"  # e.g. openspec, gate-resolver, templates, github, lifecycle
+  shift
+
+  local script=""
+  # Try lib dirs in order
+  for dir in "$LIBS_DIR" "$MZSPEC_DIR/extensions/task-github/lib" "$MZSPEC_DIR/extensions/task-github/Workflows/lib"; do
+    if [ -n "$dir" ] && [ -f "$dir/$module.js" ]; then
+      script="$dir/$module.js"
+      break
+    fi
+  done
+
+  if [ -z "$script" ]; then
+    die "module '$module.js' not found (looked in lib dirs)"
+  fi
+
+  exec node "$script" "$@"
+}
+
+# ---- docs: workflow overview -------------------------------------------------
+docs_cmd() {
+  local ver="$(version)"
+  local has_color=1
+  case "${TERM:-}" in dumb|"") has_color=0;; esac
+  local B=""; local R=""; local NC=""
+  if [ "$has_color" -eq 1 ]; then B='\033[1;34m'; R='\033[1;35m'; NC='\033[0m'; fi
+
+  # Detect extensions
+  local ext_agent=0 ext_github=0
+  if [ -n "$EXTENSIONS_DIR" ]; then
+    [ -d "$EXTENSIONS_DIR/agent-skills" ] && ext_agent=1
+    [ -d "$EXTENSIONS_DIR/task-github" ] && ext_github=1
+  fi
+  [ -f "$LIBS_DIR/github.js" ] && ext_github=1
+
+  # Detect hooks
+  local hooks_root=""
+  if [ -n "$MZSPEC_DIR" ] && [ -d "$MZSPEC_DIR/openspec/hooks" ]; then
+    hooks_root="$MZSPEC_DIR/openspec/hooks"
+  elif [ -d "openspec/hooks" ]; then
+    hooks_root="$(cd openspec/hooks && pwd 2>/dev/null || echo "")"
+  fi
+
+  local agent_hooks=() prompt_hooks=() ext_prompt_hooks=()
+  if [ -n "$hooks_root" ]; then
+    while IFS= read -r f; do
+      local name="${f##*/}"
+      case "$name" in *.agent.md) agent_hooks+=("$name");; *.prompt.md) prompt_hooks+=("$name");; esac
+    done < <(find "$hooks_root" -maxdepth 1 -type f \( -name '*.agent.md' -o -name '*.prompt.md' \) 2>/dev/null | sort)
+  fi
+  if [ -n "$EXTENSIONS_DIR" ]; then
+    while IFS= read -r f; do
+      ext_prompt_hooks+=("${f#$EXTENSIONS_DIR/}")
+    done < <(find "$EXTENSIONS_DIR" -path '*/hooks/on-*.prompt.md' -type f 2>/dev/null | sort)
+  fi
+
+  local ext_count=$((ext_agent + ext_github))
+  local hook_count=$(( ${#agent_hooks[@]} + ${#prompt_hooks[@]} + ${#ext_prompt_hooks[@]} ))
+
+  # Header
+  echo ""
+  printf "${R}╔══════════════════════════════════════════════════════════════╗${NC}\n"
+  printf "${R}║            ${B}mzspec — SDD Workflow Overview${R}                ║${NC}\n"
+  printf "${R}╚══════════════════════════════════════════════════════════════╝${NC}\n"
+  echo ""
+  printf "  Version: ${B}%s${NC}  |  Extensions: %d  |  Hooks: %d  |  Lifecycle events: 7\n" "$ver" "$ext_count" "$hook_count"
+  echo ""
+
+  # ─── CORE PIPELINE ──────────────────────────────────────────────────
+  printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  printf "${B}  CORE PIPELINE${NC}\n"
+  printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  echo ""
+  echo "  ┌─────────┐   ┌──────┐   ┌─────────┐   ┌───────────┐   ┌──────────┐   ┌───────────┐"
+  echo "  │ PROPOSE │──→│ SPEC │──→│ SPEC-PR │──→│ ⚠️  MERGE │──→│SHIP-PLAN │──→│ SHIP-CODE │"
+  echo "  └─────────┘   └──────┘   └─────────┘   │ (HUMAN)  │   └──────────┘   └───────────┘"
+  echo "                                          └──────────┘         │              │"
+  echo "                                                                           ▼"
+  echo "                                                       ┌───────────┐   ┌───────────┐"
+  echo "                                                       │ SHIP-CODE │──→│ ⚠️  MERGE │──→ 🎉"
+  echo "                                                       │ (cont.)   │   │ (HUMAN)   │"
+  echo "                                                       └───────────┘   └───────────┘"
+  echo ""
+
+  # ─── COMMANDS ───────────────────────────────────────────────────────
+  printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  printf "${B}  COMMANDS${NC}\n"
+  printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  echo ""
+  echo "  propose        Scaffold a change from a prompt → cNNNN-<slug>/ with proposal,"
+  echo "                 design.md, tasks.md, delta specs"
+  echo "  spec           Cross-validate spec across 6 axes → review/REVIEW.md"
+  echo "  spec-pr        Sync delta→canonical specs, open spec-only PR → [HUMAN MERGES]"
+  echo "  ship-plan      Group tasks into 1-4 TDD work-units → .handoff/<change>/"
+  echo "  ship-code      Execute units: Red→Green→commit → Verify → Review → Evidence → PR"
+  echo "                   ├─ Base sync     Fetch + ff-merge base branch"
+  echo "                   ├─ Preflight     Tools check, validate, branch, load handoff"
+  echo "                   ├─ Implement     Per unit: Red (failing test) → Green (code) → commit"
+  echo "                   ├─ Verify        Per-toolchain gates + openspec validate + repair loop"
+  echo "                   ├─ Review        Code review + security audit"
+  echo "                   ├─ Evidence      Write gates.md, test-results.md, coverage.txt"
+  echo "                   ├─ Sync          Reconcile delta vs canonical specs"
+  echo "                   ├─ Changelog     Prepend Keep a Changelog entry"
+  echo "                   └─ Finalize      Push + gh pr create"
+  echo "  ship            ship-plan + ship-code in one command"
+  echo "  address-review  Fix PR feedback → re-verify gates → push → reply → human re-reviews"
+  echo "  merge-pr        Auto-dispatch: spec/ branch → merge-pr-spec, feat/ → merge-pr-code"
+  echo "  author-review   Automated multi-dimension code review (for team leads)"
+  echo ""
+
+  # ─── EXTENSIONS ─────────────────────────────────────────────────────
+  printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  printf "${B}  EXTENSIONS${NC}\n"
+  printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  echo ""
+  if [ "$ext_count" -eq 0 ]; then
+    echo "  (no extensions installed)"
+    echo "  Install with: ./mzspec ext add <name>"
+    echo "  Available: agent-skills (skill library + hooks), task-github (GitHub integration)"
+    echo ""
+  fi
+  if [ "$ext_agent" -eq 1 ]; then
+    echo "  agent-skills     Skill library + 9 prompt hooks at each pipeline phase"
+    echo "    hooks: on-plan, on-test, on-implement, on-review, on-verify,"
+    echo "           on-pr, on-address-review, on-archive, on-local-merge"
+    echo ""
+  fi
+  if [ "$ext_github" -eq 1 ]; then
+    echo "  task-github      GitHub Issues & Projects integration"
+    echo "    lifecycle:     7 events sync issue status + board through the pipeline"
+    echo "    commands:      propose-gh <issue>, task-log, task-assign"
+    echo ""
+  fi
+
+  # ─── HOOKS ──────────────────────────────────────────────────────────
+  printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  printf "${B}  HOOKS (registered)${NC}\n"
+  printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  echo ""
+  if [ "${#agent_hooks[@]}" -eq 0 ] && [ "${#prompt_hooks[@]}" -eq 0 ] && [ "${#ext_prompt_hooks[@]}" -eq 0 ]; then
+    echo "  (no hooks registered)"
+  fi
+  if [ "${#agent_hooks[@]}" -gt 0 ]; then
+    echo "  Agent hooks (openspec/hooks/on-<event>.agent.md):"
+    for h in "${agent_hooks[@]}"; do
+      printf "    • %s\n" "${h%.agent.md}"
+    done
+    echo ""
+  else
+    echo "  Agent hooks: (none — create files in openspec/hooks/ to register)"
+    echo ""
+  fi
+  if [ "${#prompt_hooks[@]}" -gt 0 ]; then
+    echo "  Prompt hooks (openspec/hooks/on-<event>.prompt.md):"
+    for h in "${prompt_hooks[@]}"; do
+      printf "    • %s\n" "${h%.prompt.md}"
+    done
+    echo ""
+  fi
+  if [ "${#ext_prompt_hooks[@]}" -gt 0 ]; then
+    echo "  Extension prompt hooks:"
+    for h in "${ext_prompt_hooks[@]}"; do
+      local ev="${h##*/hooks/on-}"; ev="${ev%.prompt.md}"
+      printf "    • %s\n" "$ev"
+    done
+    echo ""
+  fi
+
+  # ─── LIFECYCLE ──────────────────────────────────────────────────────
+  if [ "$ext_github" -eq 1 ] || [ -f "$LIBS_DIR/lifecycle.js" ]; then
+    printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+    printf "${B}  LIFECYCLE (GitHub issue sync — task-github)${NC}\n"
+    printf "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+    echo ""
+    echo "  before-spec            🟢 Comment \"Spec started\" on linked issue"
+    echo "  after-spec-pr-opened   📋 Status → in-review, record PR ref, assign @me"
+    echo "  after-spec-pr-merged   ✅ Record merge SHA"
+    echo "  before-ship            🚀 Comment \"Implementation starting\""
+    echo "  after-code-pr-opened   🔧 Status → in-review, assign @me, record PR + changelog"
+    echo "  after-review-addressed 💬 Comment \"Review feedback addressed\""
+    echo "  after-code-pr-merged   🎉 Status → done, close issue, archive change"
+    echo ""
+  fi
+}
+
+# ---- install / update (delegate to bash scripts) ----------------------------
+cmd_install() {
+  if [ "$REPO_MODE" -eq 1 ]; then
+    exec bash "$MZSPEC_DIR/scripts/install.sh" "$@"
+  else
+    # Vendored mode: download from GitHub
+    local ref="main"
+    local args=()
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --ref) ref="${2:?}"; shift 2 ;;
+        --ref=*) ref="${1#*=}"; shift ;;
+        *) args+=("$1"); shift ;;
+      esac
+    done
+    log "fetching install.sh@$ref from GitHub ..."
+    bash <(curl -fsSL "https://raw.githubusercontent.com/minhlucncc/mzspec/$ref/scripts/install.sh") "${args[@]}"
+  fi
+}
+
+cmd_update() {
+  if [ "$REPO_MODE" -eq 1 ]; then
+    exec bash "$MZSPEC_DIR/scripts/update.sh" "$@"
+  else
+    local ref="main"
+    local args=()
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --ref) ref="${2:?}"; shift 2 ;;
+        --ref=*) ref="${1#*=}"; shift ;;
+        *) args+=("$1"); shift ;;
+      esac
+    done
+    log "fetching update.sh@$ref from GitHub ..."
+    bash <(curl -fsSL "https://raw.githubusercontent.com/minhlucncc/mzspec/$ref/scripts/update.sh") "${args[@]}"
+  fi
+}
+
+# ---- main dispatch ----------------------------------------------------------
+[ "$#" -eq 0 ] && usage
+
+case "$1" in
+  help|-h|--help)
+    usage
+    ;;
+  version|-v|--version)
+    version
+    ;;
+  install)
+    shift; cmd_install "$@"
+    ;;
+  update)
+    shift; cmd_update "$@"
+    ;;
+  ext)
+    shift
+    [ "$#" -eq 0 ] && { echo "usage: mzspec ext <add|remove|list|info> ..."; exit 1; }
+    case "$1" in
+      add)      shift; [ -z "${1:-}" ] && { echo "usage: mzspec ext add <extension> [--force]"; exit 1; }; ext_cmd_add "$@" ;;
+      remove)   shift; [ -z "${1:-}" ] && { echo "usage: mzspec ext remove <extension>"; exit 1; }; ext_cmd_remove "$@" ;;
+      list)     shift; case "${1:-}" in --available|--all) ext_list_available; shift;; --installed) ext_list_installed; shift;; *) ext_list_available;; esac ;;
+      info)     shift; [ -z "${1:-}" ] && { echo "usage: mzspec ext info <extension>"; exit 1; }; ext_cmd_info "$@" ;;
+      *)        echo "unknown ext subcommand: $1 (try add, remove, list, info)"; exit 1 ;;
+    esac
+    ;;
+  spec)
+    shift; node_dispatch "openspec" "$@"
+    ;;
+  gate-resolver)
+    shift; node_dispatch "gate-resolver" "$@"
+    ;;
+  discover)
+    shift; node_dispatch "discover" "$@"
+    ;;
+  template)
+    shift; node_dispatch "templates" "$@"
+    ;;
+  hooks)
+    shift
+    [ "$#" -eq 0 ] && { echo "usage: mzspec hooks list [--all]"; exit 1; }
+    case "$1" in
+      list) shift; hooks_list "$@" ;;
+      *)    echo "unknown hooks subcommand: $1 (try list)"; exit 1 ;;
+    esac
+    ;;
+  docs)
+    docs_cmd
+    ;;
+  list)
+    warn "'./mzspec list' is deprecated. Use './mzspec ext list --available' instead."
+    ext_list_available
+    ;;
+  info)
+    warn "'./mzspec info' is deprecated. Use './mzspec ext info <name>' instead."
+    shift; [ -z "${1:-}" ] && { echo "usage: mzspec info <extension>"; exit 1; }; ext_cmd_info "$@"
+    ;;
+  *)
+    if [ -n "${1:-}" ]; then
+      # Check if it looks like an old-style ext install (first arg is an extension name)
+      if [ -n "$EXTENSIONS_DIR" ] && [ -d "$EXTENSIONS_DIR/${1:-}" ]; then
+        warn "'./mzspec $1' is deprecated. Use './mzspec ext add $1' instead."
+        ext_cmd_add "$@"
+      else
+        die "unknown command: $1 (try './mzspec help')"
+      fi
+    else
+      usage
+    fi
+    ;;
+esac

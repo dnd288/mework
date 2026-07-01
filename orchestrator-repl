@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# orchestrator-repl — interactive chat with the mework orchestrator MCP server
+set -euo pipefail
+
+MCP="/Users/minh/Documents/mework/mework-mcp"
+export MEWORK_HUB_URL="${MEWORK_HUB_URL:-http://localhost:8080}"
+export MEWORK_PAT="${MEWORK_PAT:-dev-token}"
+export MEWORK_RT_TOKEN="${MEWORK_RT_TOKEN:-dev-token}"
+export MEWORK_RUNNER_ID="${MEWORK_RUNNER_ID:-orchestrator-runner}"
+export MEWORK_SESSION_ID="${MEWORK_SESSION_ID:-orchestrator-$$}"
+export MEWORK_WORKSPACE_PATH="${MEWORK_WORKSPACE_PATH:-/tmp/mework-orchestrator}"
+export MEWORK_DEV=1
+
+mkdir -p "$MEWORK_WORKSPACE_PATH"
+
+call_tool() {
+  local id="$1" tool="$2" args="$3"
+  # Escape args for JSON
+  local json
+  json=$(cat <<EOF
+{"jsonrpc":"2.0","id":$id,"method":"tools/call","params":{"name":"$tool","arguments":$args}}
+EOF
+)
+  echo "$json" | timeout 15 "$MCP" 2>/dev/null | python3 -c "
+import json,sys
+try:
+    d = json.load(sys.stdin)
+    if 'result' in d:
+        text = d['result']['content'][0]['text']
+        parsed = json.loads(text)
+        print(json.dumps(parsed, indent=2))
+    elif 'error' in d:
+        print(f'Error: {d[\"error\"][\"message\"]}')
+except Exception as e:
+    print(f'parse error: {e}')
+    print(sys.stdin.read())
+"
+}
+
+echo "╔══════════════════════════════════════════════╗"
+echo "║     mework Orchestrator — REPL              ║"
+echo "╠══════════════════════════════════════════════╣"
+echo "║ Commands:                                   ║"
+echo "║  spawn <agent_id> <prompt>  Spawn a sandbox ║"
+echo "║  status <id>                Check status    ║"
+echo "║  list                      List sandboxes   ║"
+echo "║  destroy <id>              Destroy sandbox  ║"
+echo "║  notify <msg>              Send notification║"
+echo "║  session                   Show session info║"
+echo "║  write <path> <content>    Write artifact   ║"
+echo "║  help                      This menu        ║"
+echo "║  quit                      Exit             ║"
+echo "╚══════════════════════════════════════════════╝"
+
+seq=0
+while true; do
+  echo -n "orchestrator> "
+  read -r cmd arg1 arg2 rest || break
+  case "$cmd" in
+    spawn)
+      seq=$((seq + 1))
+      call_tool $seq "spawn_sandbox" "{\"agent_id\":\"$arg1\",\"prompt\":\"$arg2 $rest\"}"
+      ;;
+    status)
+      seq=$((seq + 1))
+      call_tool $seq "get_sandbox_status" "{\"sandbox_id\":\"$arg1\"}"
+      ;;
+    list)
+      seq=$((seq + 1))
+      call_tool $seq "list_child_sandboxes" "{}"
+      ;;
+    destroy)
+      seq=$((seq + 1))
+      call_tool $seq "destroy_sandbox" "{\"sandbox_id\":\"$arg1\"}"
+      ;;
+    notify)
+      seq=$((seq + 1))
+      call_tool $seq "notify_human" "{\"message\":\"$arg1 $arg2 $rest\",\"format\":\"text\"}"
+      ;;
+    session)
+      seq=$((seq + 1))
+      call_tool $seq "get_session_context" "{}"
+      ;;
+    write)
+      seq=$((seq + 1))
+      call_tool $seq "write_artifact" "{\"path\":\"$arg1\",\"content\":\"$arg2 $rest\"}"
+      ;;
+    help)
+      echo "Commands: spawn, status, list, destroy, notify, session, write, help, quit"
+      ;;
+    quit|exit)
+      break
+      ;;
+    *)
+      echo "Unknown: $cmd (try help)"
+      ;;
+  esac
+done

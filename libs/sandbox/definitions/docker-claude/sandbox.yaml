@@ -1,0 +1,6 @@
+name: docker-claude
+version: 1.0.0
+engine: docker
+backend: claude
+image: mework/claude:1.0.0
+author: mework

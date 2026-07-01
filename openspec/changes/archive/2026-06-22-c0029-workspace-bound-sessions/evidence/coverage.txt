@@ -1,0 +1,4 @@
+$ go tool cover -func=/tmp/shipcode-c0029-workspace-bound-sessions.cover 2>/dev/null | tail -20
+total:							(statements)		22.1%
+
+merged across all 7 modules: root + libs/{shared,server,client,sandbox,tests,tools}

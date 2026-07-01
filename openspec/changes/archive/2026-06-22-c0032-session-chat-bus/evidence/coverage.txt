@@ -1,0 +1,25 @@
+mework/libs/server/webhook/parse.go:78:			isRecognizedWorkflow			100.0%
+mework/libs/server/writeback/session.go:27:		LookupChannelSession			0.0%
+mework/libs/server/writeback/session.go:73:		ExecuteWriteBackFromChannel		0.0%
+mework/libs/server/writeback/session.go:94:		executeWriteBackFromSession		0.0%
+mework/libs/server/writeback/session.go:104:		structFieldByName			80.0%
+mework/libs/server/writeback/writeback.go:15:		ExecuteWriteBack			0.0%
+mework/libs/server/writeback/writeback.go:54:		formatComment				100.0%
+total:							(statements)				14.1%
+=== c0032 package coverage ===
+mework/libs/server/bus/topics.go:31:			FormatTopic				100.0%
+mework/libs/server/bus/topics.go:37:			FormatChannelTopic			100.0%
+mework/libs/server/bus/topics.go:43:			TopicChannelEvent			100.0%
+mework/libs/server/bus/topics.go:51:			MatchTopic				100.0%
+mework/libs/server/bus/topics.go:65:			matchSegments				100.0%
+mework/libs/server/session/handlers.go:22:		NewHandlers				100.0%
+mework/libs/server/session/handlers.go:39:		CreateSession				0.0%
+mework/libs/server/session/handlers.go:69:		GetSession				0.0%
+mework/libs/server/session/handlers.go:86:		ListSessions				0.0%
+mework/libs/server/session/handlers.go:102:		AttachSession				0.0%
+mework/libs/server/session/handlers.go:124:		CloseSession				0.0%
+mework/libs/server/session/handlers.go:143:		SendMessage				60.0%
+mework/libs/server/session/handlers.go:180:		StreamSession				84.6%
+mework/libs/server/session/handlers.go:207:		ReceiveEvents				64.7%
+mework/libs/server/session/handlers.go:237:		ownsSession				71.4%
+mework/libs/server/session/handlers.go:251:		writeJSON				0.0%

@@ -1,0 +1,16 @@
+# Coverage — c0037-sandbox-cli
+
+Package under change: mework/libs/client/cli
+
+  go test -cover ./libs/client/cli/...
+  ok  mework/libs/client/cli  coverage: 34.2% of statements (package-local)
+
+  go test -coverpkg=./libs/client/cli/... ./libs/client/cli/...
+  total: (statements) 55.8%
+
+The new sandbox command RunE handlers are anonymous closures, so they do not
+appear as named rows in `go tool cover -func`; they are exercised by
+cmd_sandbox_test.go (start happy-path + --json, missing-config error,
+not-enrolled error, list, stop, send, and the command-surface assertion).
+
+Full suite: go test -p 1 ./...  -> all packages ok / no test files (0 failures).

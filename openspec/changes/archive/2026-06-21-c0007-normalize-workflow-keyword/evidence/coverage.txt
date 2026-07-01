@@ -1,0 +1,4 @@
+mework/internal/server/webhook/parse.go:10:		ParseTrigger		96.9%
+mework/internal/server/webhook/parse.go:70:		NormalizeWorkflow	100.0%
+mework/internal/server/webhook/parse.go:78:		isRecognizedWorkflow	100.0%
+total:							(statements)		21.9%

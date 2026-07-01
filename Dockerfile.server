@@ -1,0 +1,10 @@
+FROM golang:1.26-alpine AS builder
+WORKDIR /build
+COPY . .
+RUN go build -o /bin/mework-server ./apps/mework-server/
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
+COPY --from=builder /bin/mework-server /usr/local/bin/
+EXPOSE 8080
+ENTRYPOINT ["mework-server"]

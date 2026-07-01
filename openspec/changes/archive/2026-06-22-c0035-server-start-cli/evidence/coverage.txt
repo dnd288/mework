@@ -1,0 +1,3 @@
+mework/libs/client/cli/cmd_server.go:46:	init			100.0%
+mework/libs/client/cli/server_hook.go:20:	SetServerStarter	100.0%
+total:						(statements)		55.3%

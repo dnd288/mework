@@ -1,0 +1,14 @@
+# mework.yml — a workspace-local agent definition resolved by the no-server
+# (local-direct) start mode via FileDefinitionResolver, and registered with the
+# server catalog in the server start mode. Both modes yield the same bundle
+# metadata; they differ only in how the definition is resolved.
+#
+# The local engine runs `backend` as command[0] with the process CWD set to this
+# workspace, feeding the turn over stdin. The example test rewrites `backend` to
+# the absolute path of testdata/stub-backend.sh so the run is deterministic and
+# needs no real Claude Code.
+name: workspace-agent
+version: 1.0.0
+engine: local
+backend: claude
+author: mework-examples

@@ -1,0 +1,107 @@
+name: CI
+
+# Quality-gate pipeline (shift-left): the same gates the /opsx:ship verify phase
+# runs locally — lint, go build, make vet, make test — but with a real Postgres
+# so the DB-backed tests actually execute instead of skipping. Each module is
+# also built and tested independently.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to keep feedback fast.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # --- Import-guard lint: run first, fast feedback on boundary violations ---
+  lint:
+    name: Lint (import-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Lint
+        run: make lint
+
+  # --- Full build + vet + test (with Postgres) ---
+  build-and-test:
+    name: build · vet · test
+    runs-on: ubuntu-latest
+    needs: [lint]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mework_test
+        ports:
+          - 5432:5432
+        # Wait until Postgres is accepting connections before the job starts.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Migrations run themselves inside the tests; this just points them at the
+      # service container so DB-backed tests run instead of skipping.
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mework_test?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: make vet
+
+      - name: Test (serialized; -p 1 — tests share one Postgres DB)
+        run: make test
+
+  # --- Per-module independent build and test ---
+  module-build-and-test:
+    name: ${{ matrix.module }} (build + test)
+    runs-on: ubuntu-latest
+    needs: [lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [shared, server, client, sandbox]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build ${{ matrix.module }}
+        run: make build-${{ matrix.module }}
+
+      - name: Test ${{ matrix.module }}
+        run: make test-${{ matrix.module }}

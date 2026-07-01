@@ -1,0 +1,14 @@
+github.com/yourorg/mework/internal/server/jobs/state.go:46:               TransitionAllowed                                83.3%
+github.com/yourorg/mework/internal/server/jobs/store.go:102:             Enqueue                                          100.0%
+github.com/yourorg/mework/internal/server/jobs/store.go:157:             ClaimJob                                         100.0%
+github.com/yourorg/mework/internal/server/jobs/store.go:214:             AckJob                                           100.0%
+github.com/yourorg/mework/internal/server/jobs/store.go:271:             Heartbeat                                        100.0%
+github.com/yourorg/mework/internal/server/webhook/parse.go:33:           ParseTrigger                                     100.0%
+github.com/yourorg/mework/internal/server/webhook/parse.go:89:           ParseTrigger_errors                               92.9%
+github.com/yourorg/mework/internal/server/webhook/handle.go:51:          HandleWebhook                                     85.7%
+github.com/yourorg/mework/internal/server/secret/seal.go:28:             Seal                                             100.0%
+github.com/yourorg/mework/internal/server/secret/seal.go:67:             Unseal                                           100.0%
+github.com/yourorg/mework/internal/agentrun/runner.go:41:                RunAgent                                         78.6%
+github.com/yourorg/mework/internal/daemon/poll.go:73:                    PollLoop                                         72.2%
+github.com/yourorg/mework/internal/mello/client.go:55:                   CreateComment                                    100.0%
+total:                                                                  (statements)                                     53.4%
