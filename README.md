@@ -26,55 +26,82 @@ curl -fsSL https://raw.githubusercontent.com/minhlucncc/mework/main/install.sh |
 Installs `mework`, `mework-server`, `mework-mezon-worker`, and `mework-mcp`
 to `/usr/local/bin` (or `~/.local/bin`).
 
-## Quick start: Offline with Mezon
+## Quick start
 
 **Prerequisites:** [Claude Code](https://claude.ai) (`claude` in PATH)
+
+### Offline mode (single binary, no server)
+
+Run a local agent daemon — no databases, no infrastructure.
 
 ```bash
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/minhlucncc/mework/main/install.sh | sh
 
-# 2. Scaffold a workspace with provider, agent, and name
+# 2. Scaffold a workspace
 mkdir ~/my-cowork && cd ~/my-cowork
-mework init --workspace . --provider mezon --agent claude --name mybot
+mework init --workspace . --agent claude --name mybot
 
-# 3. Set your Mezon bot credentials
-#    Get app_id + api_key at https://mezon.ai/developers/dashboard
-mework provider mezon set --app-id YOUR_APP_ID --api-key YOUR_API_KEY
+# 3. Start the offline daemon
+mework daemon start --offline --workspace .
 
-# 4. Start the worker (miniredis built-in, zero config)
-mework mezon-worker start
-
-# 5. Chat from Mezon (@your-bot) or from the CLI
+# 4. Chat with your agent from the CLI
 mework agent send mybot "explore the workspace"
 mework agent send mybot "spawn a sandbox to list this repo"
 ```
 
-No databases. No server. One binary. The worker auto-initializes
-CLAUDE.md, MCP tools, skills, and slash commands in your workspace.
+The workspace comes with CLAUDE.md, MCP tools, skills, and slash commands
+(`/sessions`, `/spawn`, `/status`, `/stop`) — everything the orchestrator agent
+needs to manage child sandboxes.
+
+### Mezon bot integration (server required)
+
+Connect a Mezon chat bot so you can message your agent from any device.
+
+```bash
+# 1. Have the server running (see "Server mode" below)
+# 2. Set your Mezon bot credentials
+#    Get app_id + api_key at https://mezon.ai/developers/dashboard
+mework provider mezon set --app-id YOUR_APP_ID --api-key YOUR_API_KEY
+
+# 3. Register the bot on the server
+mework provider mezon bot register
+
+# 4. Start the Mezon worker
+mework mezon-worker start
+
+# 5. Chat from Mezon (@your-bot)
+```
 
 ## Quick start: Server mode (multi-tenant)
 
-Requires PostgreSQL and optionally Redis.
+The server powers session management, sandbox orchestration, the job queue,
+and provider integrations (Mezon, GitHub, etc.).
 
 ```bash
-# 1. Start Postgres and Redis
+# 1. Start Postgres
 docker run -d --name mework-pg -p 5432:5432 postgres:16-alpine
-docker run -d --name mework-redis -p 6379:6379 redis:7-alpine
 
 # 2. Start the server
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/mework \
   SERVER_KEY=your-key-min-16-chars \
   MEWORK_SECRET_KEY=your-key-min-16-chars \
-  REDIS_URL=redis://localhost:6379/0 \
   bin/mework-server
 
-# 3. Enroll a runner
-mework runner enroll --url http://localhost:8080 --token <token>
+# 3. Enroll a runner and start the daemon
+mework runner enroll --url http://localhost:8080
 mework daemon start
+
+# 4. Configure an AI profile
 mework profile create --name default --backend claude
+
+# 5. Turn your workspace into a sandbox session
 mework sandbox start -w .
 ```
+
+> **Note:** Commands that talk to the server (`sandbox`, `session`, `profile`,
+> `provider`) are authenticated via a Personal Access Token (PAT). Set
+> `MEWORK_API_KEY` or run `mework login` after enrolling a runner.
 
 ## CLI Commands
 
@@ -87,10 +114,11 @@ Setup:    init, login, provider, config, auth
 
 | Command | Purpose |
 |---------|---------|
-| `mework init --workspace . --provider mezon --agent claude --name mybot` | Scaffold a workspace with CLAUDE.md + MCP + skills |
-| `mework daemon start` | Start the local agent daemon (server mode) |
+| `mework init --workspace . --agent claude --name mybot` | Scaffold a workspace with CLAUDE.md + MCP + skills |
+| `mework daemon start --offline --workspace .` | Start the offline agent daemon (no server needed) |
 | `mework mezon-worker start` | Start the standalone Mezon bot worker |
 | `mework agent send <name> <msg>` | Send a message to a local or hub agent |
+| `mework provider mezon set --app-id ... --api-key ...` | Store Mezon bot credentials locally |
 | `mework provider mezon bot register` | Register a Mezon bot on the server |
 | `mework session create/attach/send` | Interactive session lifecycle |
 | `mework sandbox start -w .` | Turn a workspace into a runnable sandbox |
