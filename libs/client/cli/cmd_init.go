@@ -13,6 +13,7 @@ import (
 var initWorkspace string
 var initRole string
 var initBackend string
+var initName string
 
 var initCmd = &cobra.Command{
 	Use:   "init",
@@ -24,7 +25,7 @@ and optional .claude/skills/ and .claude/commands/ based on the selected
 agent role.
 
 Examples:
-  mework init --workspace . --agent orchestrator
+  mework init --workspace . --agent orchestrator --name mybot
   mework init --workspace ./my-project --agent worker
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -50,12 +51,16 @@ Examples:
 		}
 
 		// Create mework.yml at root.
+		name := initName
+		if name == "" {
+			name = initRole
+		}
 		yml := fmt.Sprintf(`name: %s
 version: "1.0.0"
 engine: local
 backend: %s
 role: %s
-`, initRole, initBackend, initRole)
+`, name, initBackend, initRole)
 		if err := os.WriteFile(absDir+"/mework.yml", []byte(yml), 0600); err != nil {
 			return fmt.Errorf("write mework.yml: %w", err)
 		}
@@ -170,5 +175,6 @@ func copyWorkspaceTemplate(src, dst, mcpBin string) error {
 func init() {
 	initCmd.Flags().StringVar(&initWorkspace, "workspace", "", "Target directory (default: current dir)")
 	initCmd.Flags().StringVar(&initRole, "agent", "orchestrator", "Agent role: orchestrator or worker")
+	initCmd.Flags().StringVar(&initName, "name", "", "Agent name for mework agent send (default: same as --agent)")
 	initCmd.Flags().StringVar(&initBackend, "backend", "claude", "AI backend (claude, codex, etc.)")
 }

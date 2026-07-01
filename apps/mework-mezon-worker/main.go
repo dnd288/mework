@@ -340,8 +340,16 @@ func main() {
 	initOrchestratorWorkspace("/tmp/orchestrator-workspace")
 
 	// Register agent and start socket for "mework agent send <name>".
+	// Read agent name from workspace mework.yml, or use env, or fall back to bot ID.
+	agentName := os.Getenv("MEWORK_AGENT_NAME")
+	if agentName == "" {
+		agentName = readWorkspaceName("/tmp/orchestrator-workspace")
+	}
 	for _, bot := range cfg.Bots {
-		name := bot.AppID // use bot ID as agent name (no spaces, unique)
+		name := agentName
+		if name == "" {
+			name = bot.AppID
+		}
 		sockPath, _ := runner.SocketPath("/tmp/orchestrator-workspace")
 		runner.RegisterOfflineAgent(runner.OfflineAgentInfo{
 			Name: name, SocketPath: sockPath, Status: "online",
@@ -669,6 +677,21 @@ var (
 	tableRowRe   = regexp.MustCompile(`(?m)^\|.*\|$`)
 	tableSepRe   = regexp.MustCompile(`(?m)^\|[-:| ]+\|$`)
 )
+
+// readWorkspaceName reads the `name:` field from a mework.yml file.
+func readWorkspaceName(dir string) string {
+	data, err := os.ReadFile(dir + "/mework.yml")
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "name:") {
+			return strings.TrimSpace(line[5:])
+		}
+	}
+	return ""
+}
 
 func extractText(content string) string {
 	if len(content) < 3 || content[0] != '{' {
