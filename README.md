@@ -122,14 +122,16 @@ orchestrator to coordinate everything.
 
 ## Templates
 
-```                   
+```
 templates/workspace/
-├── orchestrator/     ← mework init --agent orchestrator
-└── worker/           ← mework init --agent worker
+├── orchestrator/     ← orchestrator agent (chat, session mgmt)
+└── worker/           ← worker agent (spawned by orchestrator)
 ```
 
-Each template includes `mework.yml`, `CLAUDE.md`, `.claude/settings.json`,
-`.claude/skills/`, and `.claude/commands/`.
+`mework init` copies both templates into your workspace as
+`.mework/orchestrator/` and `.mework/worker/`. Each includes
+`mework.yml`, `CLAUDE.md`, `.claude/settings.json`, `.claude/skills/`,
+and `.claude/commands/`.
 
 ## Spec-driven development
 
