@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -27,6 +28,8 @@ import (
 	"github.com/mezon/mezon-go-sdk-turbo/lib/tier"
 	mezon_turbo "github.com/mezon/mezon-go-sdk-turbo/lib/turbo"
 	"github.com/mezon/mezon-go-sdk-turbo/lib/types"
+
+	"mework/libs/client/runner"
 )
 // Build-time variables — injected via -ldflags (see .goreleaser.yml).
 var (
@@ -335,6 +338,49 @@ func main() {
 
 	// Initialize workspace with orchestrator config + response format rules.
 	initOrchestratorWorkspace("/tmp/orchestrator-workspace")
+
+	// Register agent and start socket for "mework agent send <name>".
+	for _, bot := range cfg.Bots {
+		name := bot.AppID // use bot ID as agent name (no spaces, unique)
+		sockPath, _ := runner.SocketPath("/tmp/orchestrator-workspace")
+		runner.RegisterOfflineAgent(runner.OfflineAgentInfo{
+			Name: name, SocketPath: sockPath, Status: "online",
+			Workspace: "/tmp/orchestrator-workspace", Backend: "claude",
+		})
+		go func(sp string) {
+			os.Remove(sp)
+			l, e := net.Listen("unix", sp)
+			if e != nil { log.Printf("agent socket: %v", e); return }
+			os.Chmod(sp, 0600)
+			log.Printf("agent socket: %s", sp)
+			defer l.Close()
+			for {
+				c, e := l.Accept()
+				if e != nil { if ctx.Err() != nil { return }; continue }
+				go func(conn net.Conn) {
+					defer conn.Close()
+					var req struct {
+						Method string          `json:"method"`
+						Params json.RawMessage `json:"params"`
+						ID     interface{}      `json:"id"`
+					}
+					if json.NewDecoder(conn).Decode(&req) != nil { return }
+					if req.Method != "run" { return }
+					var p struct{ Instruction string `json:"instruction"` }
+					json.Unmarshal(req.Params, &p)
+					if p.Instruction == "" { return }
+					msgMu.Lock()
+					msgCounter++
+					mid := fmt.Sprintf("cli:%d", msgCounter)
+					msgMu.Unlock()
+					data, _ := json.Marshal(inboxMessage{ID: mid, Text: p.Instruction})
+					rdb.LPush(ctx, "orchestrator:inbox", data)
+					log.Printf("agent socket: pushed: %s", p.Instruction)
+					json.NewEncoder(conn).Encode(map[string]interface{}{"result": map[string]interface{}{"output": "accepted, processing...", "exitCode": 0}, "id": req.ID})
+				}(c)
+			}
+		}(sockPath)
+	}
 
 	log.Printf("worker started with %d bots", len(cfg.Bots))
 
